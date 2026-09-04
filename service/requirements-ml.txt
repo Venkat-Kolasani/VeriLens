@@ -1,0 +1,16 @@
+# OPTIONAL extras for Lane E (face match, service/lane_face.py).
+#
+# The base service does NOT need these. requirements.txt alone gives you the
+# quality gate, lanes B/C and the judge, which is what the free CPU hosting
+# tier installs. Without these, face_similarity() returns None with a reason
+# and the identity axis simply stays unknown -- nothing raises.
+#
+# Install (on top of requirements.txt):
+#     pip install -r requirements-ml.txt
+#
+# CPU-only. buffalo_l/ArcFace weights (~300MB) download on first call and are
+# cached in service/weights/ (gitignored). insightface builds native
+# extensions, so a C/C++ compiler is required.
+
+insightface==0.7.3
+onnxruntime==1.20.1

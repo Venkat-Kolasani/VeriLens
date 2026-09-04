@@ -60,6 +60,7 @@ def judge(
     *,
     attested: bool = False,
     face_similarity: float | None = None,
+    require_identity: bool = False,
 ) -> Verdict:
     reasons: list[Reason] = []
 
@@ -74,6 +75,15 @@ def judge(
         else:
             identity = "INDETERMINATE"
             reasons.append(Reason("E", f"Face match inconclusive (similarity {face_similarity:.2f}).", "warn"))
+    elif require_identity:
+        # A pair check with no computable similarity is NOT the same as a
+        # single-image check where identity does not apply. Identity is
+        # required here and unknown, so the case must go to a human.
+        identity = "INDETERMINATE"
+        reasons.append(
+            Reason("E", "Identity could not be verified: no face similarity was computed. "
+                        "Routing to review rather than accepting an unverified match.", "warn")
+        )
 
     # Gate 1: is the image readable at all? Abstaining here is the whole
     # point -- a verdict on a destroyed image is a fabricated verdict.

@@ -20,6 +20,7 @@ from pydantic import BaseModel
 
 from config import CFG
 from judge import Verdict, judge
+from lane_face import face_similarity
 from lanes import lane_b_noise, lane_c_compression, load_image, quality_gate
 
 MAX_UPLOAD_BYTES = 12 * 1024 * 1024
@@ -126,13 +127,13 @@ def _analyze_one(data: bytes):
             for r in results
         ],
     )
-    return analysis, q, results
+    return analysis, q, results, bgr
 
 
 @app.post("/v1/analyze/single", response_model=AnalyzeOut)
 async def analyze_single(image: UploadFile = File(...), attested: bool = False):
     """Authenticity only. No identity axis - there is nothing to match against."""
-    analysis, q, results = _analyze_one(await _read_upload(image))
+    analysis, q, results, _ = _analyze_one(await _read_upload(image))
     v = judge(q, results, attested=attested)
     return AnalyzeOut(version=CFG.version, verdict=_verdict_out(v), selfie=analysis)
 
@@ -148,25 +149,38 @@ async def analyze(
     Authenticity takes the WORST of the two images: a genuine selfie paired
     with a doctored ID document is still a failed check.
     """
-    id_analysis, id_q, id_results = _analyze_one(await _read_upload(id_image))
-    selfie_analysis, s_q, s_results = _analyze_one(await _read_upload(selfie))
+    id_analysis, id_q, id_results, id_bgr = _analyze_one(await _read_upload(id_image))
+    selfie_analysis, s_q, s_results, s_bgr = _analyze_one(await _read_upload(selfie))
 
+    # Authenticity: judge each image on its own, then keep the worse one.
+    # A genuine selfie paired with a doctored ID is still a failed check.
+    rank = {"LIKELY_FAKE": 0, "INSUFFICIENT_EVIDENCE": 1, "REAL": 2}
     id_v = judge(id_q, id_results, attested=False)
     selfie_v = judge(s_q, s_results, attested=attested)
+    worse_is_id = rank[id_v.authenticity] < rank[selfie_v.authenticity]
 
-    rank = {"LIKELY_FAKE": 0, "INSUFFICIENT_EVIDENCE": 1, "REAL": 2}
-    worst = min([id_v, selfie_v], key=lambda v: rank[v.authenticity])
+    # Identity is orthogonal, so it is resolved once over both images and
+    # then folded into the decision by the judge.
+    sim, face_reasons = face_similarity(id_bgr, s_bgr)
 
-    # Label each reason with which image produced it.
-    worst.reasons = (
+    # Re-judge the worse image with the identity signal attached, so the
+    # decision reflects both axes rather than being patched afterwards.
+    if worse_is_id:
+        final = judge(id_q, id_results, attested=False, face_similarity=sim, require_identity=True)
+    else:
+        final = judge(s_q, s_results, attested=attested, face_similarity=sim, require_identity=True)
+
+    Reason = type(final.reasons[0]) if final.reasons else None
+    labelled = (
         [type(r)(r.lane, f"[ID] {r.text}", r.severity) for r in id_v.reasons]
         + [type(r)(r.lane, f"[Selfie] {r.text}", r.severity) for r in selfie_v.reasons]
     )
-    # ponytail: Lane E (face match) lands in W4; until then identity is
-    # unknown, so a clean pair routes to REVIEW rather than ACCEPT.
-    worst.identity = "INDETERMINATE"
-    if worst.authenticity == "REAL":
-        worst.decision = "REVIEW"
+    identity_reasons = [r for r in final.reasons if r.lane in ("E", "J")]
+    final.reasons = identity_reasons + labelled
+    if Reason is not None:
+        final.reasons += [Reason("E", t, "info") for t in face_reasons]
+
+    worst = final
 
     return AnalyzeOut(
         version=CFG.version,
@@ -195,6 +209,9 @@ def model_card():
              "reads": "regions unnaturally noise-free for their detail level"},
             {"id": "C", "name": "Compression / ELA", "trained": False,
              "reads": "recompression error inconsistent with local detail"},
+            {"id": "E", "name": "Face match", "trained": True,
+             "reads": "cosine similarity between ID and selfie face embeddings",
+             "optional_deps": "requirements-ml.txt"},
         ],
         "thresholds": {k: v for k, v in vars(CFG).items()} or asdict(CFG),
         "confidence_is_calibrated": CFG.confidence_is_calibrated,
@@ -206,8 +223,11 @@ def model_card():
             "Absence of capture attestation is never treated as evidence of fakery.",
             "Heavily compressed or low-resolution images return "
             "INSUFFICIENT_EVIDENCE by design rather than a guess.",
-            "Lane A (trained local-synthesis detector) and Lane E (face match) "
-            "are not yet wired in; identity is reported as INDETERMINATE.",
+            "Lane A (trained local-synthesis detector) is not yet wired in.",
+            "Lane E (face match) is wired in but its dependencies are optional. "
+            "Without requirements-ml.txt installed no similarity is computed, so "
+            "a pair check reports identity=INDETERMINATE and routes to REVIEW "
+            "rather than accepting an unverified identity.",
         ],
         "does_not_claim": [
             "Novel research. The techniques (ELA, noise residuals, robust "

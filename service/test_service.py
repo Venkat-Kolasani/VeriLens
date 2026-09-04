@@ -159,6 +159,30 @@ def test_identity_axis_independent():
     print("ok  identity axis is independent of authenticity")
 
 
+def test_pair_without_face_match_never_accepts():
+    """A KYC pair check that cannot verify the face must not ACCEPT.
+
+    identity=None means "not applicable" (single image). For a pair it is
+    "unverified", which is a review case, not a pass.
+    """
+    from lanes import LaneResult
+
+    pil, bgr = load_image(_jpeg_bytes(_textured(512, 512)))
+    q = quality_gate(pil, bgr)
+    lanes = [
+        LaneResult("B", "Noise residual", 0.05, 0.8),
+        LaneResult("C", "Compression / ELA", 0.10, 0.8),
+    ]
+    v = judge(q, lanes, face_similarity=None, require_identity=True)
+    assert v.authenticity == "REAL", v.authenticity
+    assert v.identity == "INDETERMINATE", v.identity
+    assert v.decision == "REVIEW", "unverified identity must not accept"
+    # single-image path is unaffected: identity genuinely does not apply
+    single = judge(q, lanes, face_similarity=None, require_identity=False)
+    assert single.identity is None and single.decision == "ACCEPT"
+    print("ok  pair without face match routes to REVIEW")
+
+
 if __name__ == "__main__":
     for fn in [
         test_jpeg_quality_roundtrip,
@@ -169,6 +193,7 @@ if __name__ == "__main__":
         test_lane_disagreement_abstains,
         test_attestation_never_lowers,
         test_identity_axis_independent,
+        test_pair_without_face_match_never_accepts,
     ]:
         fn()
     print("\nall checks passed")
