@@ -279,7 +279,9 @@ Straight from `known_limitations` in `/v1/model-card`:
   grants no confidence bonus and is not yet an injection defence.
 - Heavily compressed or low-resolution images return `INSUFFICIENT_EVIDENCE` by
   design rather than a guess.
-- Lane A (trained local-synthesis detector) is not yet wired in.
+- Lane A (trained local-synthesis detector) is wired in but needs both
+  `requirements-ml.txt` and a checkpoint at `weights/lane_a.pt`. Without
+  either it abstains with a reason and lanes B/C carry the verdict.
 - Lane E (face match) is wired in but its dependencies are optional. Without
   them installed, identity reports `INDETERMINATE` and the case goes to review.
 
@@ -338,3 +340,59 @@ calibration has exactly one file to touch.
 > review — it never raises. The base service
 > is deliberately deployable without them, and the `Dockerfile` installs only
 > `requirements.txt`.
+
+---
+
+## Training Lane A
+
+Lane A is the only trained lane. It reads locally synthesised content at patch
+level, and it is trained on INP-X *exchanged* images specifically so it cannot
+lean on the global VAE artifact that arXiv 2602.00192 showed published
+detectors depend on.
+
+### On Kaggle (free T4, no download)
+
+The 9.9 GB dataset is already mounted there, so this is far faster than
+pulling it locally. Push the trainer as a script kernel:
+
+```bash
+kaggle kernels push -p kaggle_train
+```
+
+`kaggle_train/kernel-metadata.json` needs `enable_gpu: true`,
+`enable_internet: true` (timm downloads pretrained weights), and
+`dataset_sources: ["emirhanbilgic/inpainting-exchange"]`.
+
+Two things that will waste your time if you do not know them:
+
+1. **The kernel `id` must use your real Kaggle username**, not your display
+   name or GitHub handle. A mismatch fails every update with a bare
+   `409 Conflict` that never explains itself. Check with `kaggle config view`.
+2. **Kaggle runs the file as a bare script with no CLI arguments.** Set
+   `sys.argv` inside the `if __name__ == "__main__":` block at the *end* of the
+   file. Prepending it at the top is a `SyntaxError`, because
+   `from __future__ import annotations` must be the first statement.
+
+Then collect the checkpoint:
+
+```bash
+kaggle kernels output <user>/verilens-lane-a-train -p /tmp/out && cp /tmp/out/lane_a.pt weights/lane_a.pt
+```
+
+### Locally
+
+```bash
+python train_lane_a.py --data /path/to/inpainting-exchange --out weights/lane_a.pt --face-only --limit 50
+```
+
+Use `--limit` first: it validates the dataset layout cheaply before a full run.
+`--face-only` restricts training to CelebAHQ, the KYC domain — 2010 train and
+893 held-out mask-paired edits. Without it, `--face-weight` oversamples faces
+while still training across all four datasets.
+
+### Reading the output
+
+Validation accuracy is reported per source. The **exchanged** column is the
+honest headline: it is the setting where published detectors fall to chance,
+and it is the number `lane_a.py` reads back as the lane's confidence, so an
+undocumented checkpoint cannot quietly dominate the judge.
