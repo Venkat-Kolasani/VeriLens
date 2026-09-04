@@ -109,7 +109,7 @@ Supabase gives you a free PostgreSQL database + file storage.
 
 ### Step E: Add Keys to the Forensics Service (Optional)
 
-1. Open `service/.env`
+1. Open `service/.env` (SightEngine only — the service has no database)
 2. Add:
    ```
    SUPABASE_URL=https://abc123.supabase.co
@@ -229,13 +229,17 @@ self-transfer, so no contract deployment is needed.
 `expo-secure-store`. Never commit a private key.
 
 ### `service/.env` (Forensics Service)
+
+The service is stateless and has no database. The only variables it reads are
+the optional comparison baseline:
+
 ```
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_KEY=your-service-role-key
-# optional, comparison baseline only
 SIGHTENGINE_USER=your-user-id
 SIGHTENGINE_SECRET=your-secret
 ```
+
+Leave them unset in normal use. SightEngine is a third party, and sending it a
+KYC image changes nothing in the returned verdict.
 
 ---
 
