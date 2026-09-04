@@ -1,19 +1,19 @@
 {
   "expo": {
-    "name": "ProofSnap",
-    "slug": "ProofSnap",
+    "name": "VeriLens",
+    "slug": "VeriLens",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "proofsnap",
+    "scheme": "verilens",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSCameraUsageDescription": "ProofSnap needs camera access to capture photos and videos for verification.",
-        "NSPhotoLibraryUsageDescription": "ProofSnap needs photo library access to import media for verification.",
-        "NSMicrophoneUsageDescription": "ProofSnap needs microphone access for video capture."
+        "NSCameraUsageDescription": "VeriLens needs camera access to capture photos and videos for verification.",
+        "NSPhotoLibraryUsageDescription": "VeriLens needs photo library access to import media for verification.",
+        "NSMicrophoneUsageDescription": "VeriLens needs microphone access for video capture."
       }
     },
     "android": {
@@ -35,7 +35,7 @@
         "android.permission.ACCESS_MEDIA_LOCATION",
         "android.permission.READ_MEDIA_VISUAL_USER_SELECTED"
       ],
-      "package": "com.anonymous.ProofSnap"
+      "package": "com.anonymous.VeriLens"
     },
     "web": {
       "output": "static",
@@ -58,22 +58,22 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "ProofSnap needs camera access to capture photos for verification.",
-          "microphonePermission": "ProofSnap needs microphone access for video capture.",
+          "cameraPermission": "VeriLens needs camera access to capture photos for verification.",
+          "microphonePermission": "VeriLens needs microphone access for video capture.",
           "recordAudioAndroid": true
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "ProofSnap needs photo library access to import media for verification."
+          "photosPermission": "VeriLens needs photo library access to import media for verification."
         }
       ],
       [
         "expo-media-library",
         {
-          "photosPermission": "ProofSnap needs photo library access to scan your gallery for tampered images.",
-          "savePhotosPermission": "ProofSnap needs permission to save verified images.",
+          "photosPermission": "VeriLens needs photo library access to scan your gallery for tampered images.",
+          "savePhotosPermission": "VeriLens needs permission to save verified images.",
           "isAccessMediaLocationEnabled": true
         }
       ],

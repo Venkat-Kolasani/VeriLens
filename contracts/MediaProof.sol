@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 /**
  * @title MediaProof
- * @notice On-chain proof-of-capture anchoring for ProofSnap
+ * @notice On-chain proof-of-capture anchoring for VeriLens
  * @dev Stores SHA-256 file hashes with digital signatures on Sepolia Testnet
  * 
  * OPTIONAL — the app does not require this contract.

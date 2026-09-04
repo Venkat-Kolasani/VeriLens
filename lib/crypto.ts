@@ -11,8 +11,8 @@ const sha512Hash = (...msgs: Uint8Array[]) => sha512(ed.etc.concatBytes(...msgs)
 ed.etc.sha512Sync = sha512Hash;
 ed.etc.sha512Async = async (...msgs: Uint8Array[]) => sha512Hash(...msgs);
 
-const PRIVATE_KEY_STORE = 'proofsnap_private_key';
-const PUBLIC_KEY_STORE = 'proofsnap_public_key';
+const PRIVATE_KEY_STORE = 'verilens_private_key';
+const PUBLIC_KEY_STORE = 'verilens_public_key';
 
 function uint8ArrayToHex(arr: Uint8Array): string {
   return Array.from(arr)

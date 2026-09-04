@@ -3,7 +3,7 @@ import * as SecureStore from 'expo-secure-store';
 import { CHAIN_RPC, CONTRACT_ADDRESS, CHAIN_EXPLORER, CHAIN_FAUCET, WALLET_PRIVATE_KEY } from '@/constants/config';
 import { MEDIA_PROOF_ABI } from '@/constants/abi';
 
-const WALLET_KEY = 'proofsnap_eth_wallet';
+const WALLET_KEY = 'verilens_eth_wallet';
 
 // Blockscout v2 REST API (eth-sepolia.blockscout.com)
 const BLOCKSCOUT_API = `${CHAIN_EXPLORER}/api/v2`;
@@ -206,7 +206,7 @@ export async function fetchTransactionFromExplorer(txHash: string): Promise<Expl
     // Extract raw input data (Blockscout v2 field name)
     const rawInput: string = tx.raw_input ?? tx.input ?? '';
 
-    // Try to decode ProofSnap anchored data
+    // Try to decode VeriLens anchored data
     let decodedProof: { fileHash: string; signature: string; publicKey: string } | undefined;
     if (rawInput && rawInput.length > 10) {
       decodedProof = decodeProofData(rawInput) ?? undefined;

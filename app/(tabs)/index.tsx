@@ -61,7 +61,7 @@ export default function HomeScreen() {
         <Animated.View entering={FadeInDown.delay(100).springify()} style={styles.header}>
           <View>
             <Text style={[styles.greeting, { color: colors.textSecondary }]}>Welcome to</Text>
-            <Text style={[styles.appName, { color: colors.text }]}>ProofSnap</Text>
+            <Text style={[styles.appName, { color: colors.text }]}>VeriLens</Text>
             <Text style={[styles.tagline, { color: colors.textSecondary }]}>
               Proof of Capture
             </Text>

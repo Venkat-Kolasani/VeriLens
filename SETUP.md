@@ -1,34 +1,44 @@
-# 🚀 ProofSnap — Complete Setup Guide
+# 🚀 VeriLens — Complete Setup Guide
 
 ## Step-by-Step: Get Everything Running
 
 ---
 
-## 1️⃣ DataHaven Blockchain Setup (Required for real blockchain)
+## 1️⃣ Sepolia Blockchain Setup (Optional)
 
-DataHaven is a **Substrate-based L1 blockchain with full EVM compatibility**, secured by EigenLayer.
-Your app currently runs with **simulated blockchain** (fake tx hashes). To use the REAL blockchain:
+Sepolia is Ethereum's public L1 testnet. Anchoring is **real** — every verdict
+writes an actual transaction you can open in a block explorer.
 
-### Step A: Add DataHaven Testnet to MetaMask
+Anchoring is optional: the app detects and judges images without it. Set it up
+if you want the tamper-proof audit record.
 
-1. Open **MetaMask** → Networks → Add Network → Add manually
-2. Fill in:
-   | Field | Value |
-   |-------|-------|
-   | Network Name | `DataHaven Testnet` |
-   | RPC URL | `https://services.datahaven-testnet.network/testnet` |
-   | Chain ID | `55931` |
-   | Currency Symbol | `MOCK` |
-   | Block Explorer | `https://datahaven-testnet.explorer.caldera.xyz` |
-3. Click **Save**
+### Step A: Select Sepolia in MetaMask
 
-### Step B: Get Free MOCK Tokens
+Sepolia ships with MetaMask — no custom network needed. Just enable it:
 
-1. Go to [DataHaven Faucet](https://apps.datahaven.xyz/faucet)
-2. Sign in (create a DataHaven account if needed)
-3. Paste your MetaMask wallet address
-4. Click **Request MOCK Tokens**
-5. Wait ~10 seconds — you'll see MOCK tokens in your wallet
+1. Open **MetaMask** → network dropdown → **Show test networks**
+2. Select **Sepolia**
+
+Reference values (only needed for a non-MetaMask wallet):
+
+| Field | Value |
+|-------|-------|
+| Network Name | `Sepolia Testnet` |
+| RPC URL | `https://ethereum-sepolia-rpc.publicnode.com` |
+| Chain ID | `11155111` |
+| Currency Symbol | `SepoliaETH` |
+| Block Explorer | `https://eth-sepolia.blockscout.com` |
+
+### Step B: Get Free SepoliaETH
+
+The app generates its own device wallet in `expo-secure-store` and shows the
+address in the Profile tab. Fund **that** address, not your MetaMask account.
+
+1. Copy the wallet address from the app's Profile tab
+2. Go to the [Google Cloud Web3 Faucet](https://cloud.google.com/application/web3/faucet/ethereum/sepolia)
+3. Sign in with a Google account
+4. Paste the address and request SepoliaETH
+5. Wait ~15 seconds, then pull-to-refresh the Profile tab
 
 ### Step C: Deploy the Smart Contract
 
@@ -40,7 +50,7 @@ Your app currently runs with **simulated blockchain** (fake tx hashes). To use t
    - Click **Compile**
 5. Go to **Deploy & Run** tab:
    - Environment: **Injected Provider - MetaMask**
-   - Make sure MetaMask is on **DataHaven Testnet**
+   - Make sure MetaMask is on **Sepolia Testnet**
    - Click **Deploy**
    - Confirm the transaction in MetaMask
 6. Copy the deployed contract address (looks like `0x1234...abcd`)
@@ -52,11 +62,11 @@ Your app currently runs with **simulated blockchain** (fake tx hashes). To use t
 
 ### Step D: Verify It Works
 
-1. Open the block explorer: https://datahaven-testnet.explorer.caldera.xyz
+1. Open the block explorer: https://eth-sepolia.blockscout.com
 2. Search for your contract address
 3. You should see the deployment transaction
 
-> **That's it!** Now every proof your app creates will be **genuinely anchored** on DataHaven blockchain.
+> **That's it!** Now every proof your app creates will be **genuinely anchored** on Sepolia.
 
 ---
 
@@ -69,7 +79,7 @@ Supabase gives you a free PostgreSQL database + file storage.
 1. Go to [supabase.com](https://supabase.com) → **Start your project** (free)
 2. Sign up with GitHub
 3. Click **New Project**
-4. Choose a name (e.g., `proofsnap`), set a database password, pick a region
+4. Choose a name (e.g., `verilens`), set a database password, pick a region
 5. Wait ~2 minutes for the project to spin up
 
 ### Step B: Create the Database Table
@@ -92,14 +102,14 @@ Supabase gives you a free PostgreSQL database + file storage.
 
 1. Open `constants/config.ts`
 2. Replace the placeholder values:
-   ```typescript
-   export const SUPABASE_URL: string = 'https://abc123.supabase.co';
-   export const SUPABASE_ANON_KEY: string = 'eyJhbGciOiJIUzI1NiIsInR...';
+   ```
+   EXPO_PUBLIC_SUPABASE_URL=https://abc123.supabase.co
+   EXPO_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR...
    ```
 
-### Step E: Add Keys to Backend Server (Optional)
+### Step E: Add Keys to the Forensics Service (Optional)
 
-1. Open `server/.env` (create from `server/.env.example`)
+1. Open `service/.env`
 2. Add:
    ```
    SUPABASE_URL=https://abc123.supabase.co
@@ -110,7 +120,7 @@ Supabase gives you a free PostgreSQL database + file storage.
 
 ## 3️⃣ SightEngine AI Setup (Optional — for real AI detection)
 
-Without this, AI detection returns realistic **simulated** results (fine for hackathon demo).
+Detection does not depend on this. The lanes in `service/` are the detector; SightEngine is only used as a comparison baseline.
 
 ### Step A: Create Account
 
@@ -122,9 +132,9 @@ Without this, AI detection returns realistic **simulated** results (fine for hac
 1. Dashboard → API Keys
 2. Copy **API User** and **API Secret**
 
-### Step C: Add to Backend Server
+### Step C: Add to the Forensics Service
 
-1. Create `server/.env` from `server/.env.example`
+1. Create `service/.env`
 2. Add:
    ```
    SIGHTENGINE_USER=123456789
@@ -159,7 +169,7 @@ Server runs at `http://localhost:3001`
    - Build command: `npm install`
    - Start command: `npm start`
 5. Add environment variables (SIGHTENGINE_USER, SIGHTENGINE_SECRET, SUPABASE_URL, SUPABASE_KEY)
-6. Copy the Render URL (e.g., `https://proofsnap-api.onrender.com`)
+6. Copy the Render URL (e.g., `https://verilens-api.onrender.com`)
 7. Update `API_BASE_URL` in `constants/config.ts`
 
 ---
@@ -167,7 +177,7 @@ Server runs at `http://localhost:3001`
 ## 5️⃣ Running the Mobile App
 
 ```bash
-# In the ProofSnap root directory
+# In the VeriLens root directory
 npm install
 npx expo start
 ```
@@ -190,32 +200,41 @@ npx expo start --ios
 
 | Service | Purpose | Required? | Cost |
 |---------|---------|-----------|------|
-| **DataHaven** | Blockchain proof anchoring | No (simulated by default) | Free (testnet) |
-| **Supabase** | Cloud database + file storage | No (local SQLite used) | Free tier |
-| **SightEngine** | AI deepfake detection | No (simulated results) | Free (500/month) |
-| **Render.com** | Backend API hosting | No (simulated locally) | Free tier |
+| **Forensics service** (`service/`) | Detection + verdict | **Yes** — it is the detector | Free (self-hosted, CPU) |
+| **Sepolia** | Tamper-proof audit anchor | No (detection works without it) | Free (testnet) |
+| **Supabase** | Cloud case records + review queue | No (local SQLite used) | Free tier |
+| **HuggingFace Spaces** | Hosting for `service/` | No (runs locally) | Free tier (CPU) |
+| **SightEngine** | Baseline for side-by-side comparison only | No | Free trial |
 
-> **Everything works without any external service** — the app uses simulations by default. Set up services one by one to enable real features.
+> Detection never falls back to a simulation. If an image cannot be read, the
+> service returns `INSUFFICIENT_EVIDENCE` rather than inventing a score.
 
 ---
 
 ## 🔑 All API Keys & Where They Go
 
-### `constants/config.ts` (Mobile App)
-```typescript
-export const SUPABASE_URL = 'https://your-project.supabase.co';
-export const SUPABASE_ANON_KEY = 'your-anon-key';
-export const CONTRACT_ADDRESS = '0xYourDeployedContract';
-export const API_BASE_URL = 'https://your-render-url.onrender.com';
+### `.env` (Mobile App)
+
+Read by `constants/config.ts`. Expo inlines `EXPO_PUBLIC_*` at build time.
+
+```
+EXPO_PUBLIC_API_BASE_URL=http://localhost:8000
+EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 ```
 
-### `server/.env` (Backend)
+`CONTRACT_ADDRESS` stays the zero address — anchoring uses a data-only
+self-transfer, so no contract deployment is needed.
+`WALLET_PRIVATE_KEY` stays empty — a per-device wallet is generated in
+`expo-secure-store`. Never commit a private key.
+
+### `service/.env` (Forensics Service)
 ```
-PORT=3001
-SIGHTENGINE_USER=your-user-id
-SIGHTENGINE_SECRET=your-secret
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_KEY=your-service-role-key
+# optional, comparison baseline only
+SIGHTENGINE_USER=your-user-id
+SIGHTENGINE_SECRET=your-secret
 ```
 
 ---
@@ -227,7 +246,7 @@ SUPABASE_KEY=your-service-role-key
 | Mobile Framework | Expo SDK 54 + React Native 0.81 |
 | Navigation | expo-router v6 (file-based routing) |
 | Cryptography | SHA-256 (expo-crypto) + Ed25519 (@noble/ed25519) |
-| Blockchain | DataHaven Testnet (EVM, Chain ID 55931) via ethers v6 |
+| Blockchain | Sepolia Testnet (EVM, Chain ID 11155111) via ethers v6 |
 | Cloud Storage | Supabase (PostgreSQL + Object Storage) |
 | Local Database | expo-sqlite v16 |
 | AI Detection | SightEngine API (deepfake + AI-generated) |

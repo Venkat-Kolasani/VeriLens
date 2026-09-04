@@ -1,23 +1,24 @@
 <p align="center">
-  <img src="assets/images/icon.png" width="120" alt="ProofSnap Logo" />
+  <img src="assets/images/icon.png" width="120" alt="VeriLens Logo" />
 </p>
 
-<h1 align="center">ProofSnap</h1>
+<h1 align="center">VeriLens</h1>
 
 <p align="center">
-  <strong>Capture. Hash. Sign. Verify. Trust.</strong>
+  <strong>Deepfake / AI-Generated Image Detector for KYC</strong>
 </p>
 
 <p align="center">
-  A mobile app that combats deepfakes and media manipulation by generating cryptographic proofs at the moment of capture, anchoring them on the <b>DataHaven blockchain</b>, and running AI-powered authenticity detection — giving every photo an unforgeable <b>Trust Score</b>.
+  A mobile app for identity verification: it takes an <b>ID document photo</b> and a <b>selfie</b>, detects whether either is <b>AI-generated or manipulated</b>, face-matches the two, and anchors the result on <b>Ethereum Sepolia</b>. It reports three explicit verdicts with per-lane reasoning instead of one opaque number — and abstains when the image is too degraded to read honestly.
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Expo-54-000020?logo=expo&logoColor=white" />
   <img src="https://img.shields.io/badge/React%20Native-0.81-61DAFB?logo=react&logoColor=white" />
   <img src="https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white" />
+  <img src="https://img.shields.io/badge/FastAPI-forensics-009688?logo=fastapi&logoColor=white" />
   <img src="https://img.shields.io/badge/Solidity-0.8.20-363636?logo=solidity&logoColor=white" />
-  <img src="https://img.shields.io/badge/DataHaven-Testnet-6C3CE1" />
+  <img src="https://img.shields.io/badge/Ethereum-Sepolia-627EEA?logo=ethereum&logoColor=white" />
   <img src="https://img.shields.io/badge/License-MIT-green" />
 </p>
 
@@ -26,7 +27,7 @@
 ## Table of Contents
 
 - [The Problem](#-the-problem)
-- [How ProofSnap Solves It](#-how-proofsnap-solves-it)
+- [How VeriLens Solves It](#-how-verilens-solves-it)
 - [Features](#-features)
 - [Architecture](#-architecture)
 - [Tech Stack](#-tech-stack)
@@ -34,8 +35,8 @@
 - [Getting Started](#-getting-started)
 - [Project Structure](#-project-structure)
 - [Verification Pipeline](#-verification-pipeline)
-- [Trust Score Algorithm](#-trust-score-algorithm)
-- [Smart Contract](#-smart-contract)
+- [Verdicts & Abstention](#-verdicts--abstention)
+- [Smart Contract (Optional)](#-smart-contract-optional)
 - [External Services Setup](#-external-services-setup)
 - [API Reference](#-api-reference)
 - [Security Architecture](#-security-architecture)
@@ -48,20 +49,23 @@
 
 ## 🔴 The Problem
 
-Anyone with a laptop can generate a hyper-realistic photo that never happened. Deepfakes are being used to spread misinformation, fabricate evidence, and erode trust in digital media. When someone shows you a photo, **how do you prove it's real?**
+Anyone with a laptop can generate a hyper-realistic face that never existed, or paste a new portrait onto a real ID card. Remote KYC — the "upload your ID and a selfie" flow behind every bank account, exchange, and rental — was designed for a world where a photo was hard to fake. That world is gone.
 
-## 💡 How ProofSnap Solves It
+The usual response is a detector that emits one confidence number. That fails twice: it gives no reason a compliance officer can act on, and it answers just as confidently on a 200-pixel blurred thumbnail as on a clean capture.
 
-ProofSnap creates an **unforgeable proof of capture** for every photo. The moment you snap a picture, ProofSnap performs these steps in under 10 seconds:
+## 💡 How VeriLens Solves It
 
-1. **Generates a SHA-256 cryptographic hash** — a unique digital fingerprint of every pixel
-2. **Signs it with your device's Ed25519 key** — proving it came from YOUR phone
-3. **Anchors the proof on a real blockchain** — the DataHaven Testnet — making it permanent and tamper-proof
-4. **Runs AI deepfake analysis** — detecting manipulation, face-swaps, and AI generation
-5. **Computes a Trust Score out of 100** — a single number that tells you: is this media authentic?
-6. **Watermarks & syncs to the cloud** — provenance watermark + Supabase backup
+VeriLens takes the two images a KYC flow already collects — an **ID document photo** and a **selfie** — and answers three separate questions:
 
-**If even a single pixel is changed — a screenshot, a crop, a filter — the hash won't match. Tampering is mathematically impossible to hide.**
+1. **Is either image synthetic or manipulated?** Independent forensic lanes look for AI generation, splicing, and retouching
+2. **Is the person in the selfie the person on the ID?** Face embeddings from both images are compared
+3. **What should a human do about it?** Accept, reject, or send it to manual review
+
+Each lane **explains its own read** — which region it flagged, which statistic fired, how much its answer can be trusted — rather than folding everything into one opaque score.
+
+And when the image cannot support a forensic read at all — too small, too blurred, too heavily recompressed — VeriLens says **INSUFFICIENT_EVIDENCE** and routes to a human instead of guessing. In KYC, a confidently wrong reject locks a real person out of their bank account.
+
+Every verdict is hashed, signed with the device's Ed25519 key, and anchored on **Ethereum Sepolia**, so the result can be produced later as an immutable, timestamped record of what was decided and when.
 
 ---
 
@@ -69,18 +73,20 @@ ProofSnap creates an **unforgeable proof of capture** for every photo. The momen
 
 | Feature | Description |
 |---------|-------------|
+| 🪪 **ID + Selfie KYC Flow** | Capture an ID document photo and a selfie; both are analysed together |
+| 🤖 **AI-Generation Detection** | Noise-residual lane flags regions too clean for real sensor output — the signature of diffusion-generated content |
+| 🩹 **Manipulation Detection** | ELA / compression lane flags regions whose recompression error is inconsistent with their own detail — splices and pasted portraits |
+| 🧑‍🤝‍🧑 **Face Match** | Cosine similarity on face embeddings from the ID portrait and the selfie |
+| 🚦 **Three-Axis Verdict** | `authenticity` + `identity` + `decision` — never a single blended number |
+| 🛑 **Honest Abstention** | A quality gate rejects unreadable images up front; conflicting or low-confidence lanes return `INSUFFICIENT_EVIDENCE` → human review |
+| 🗣️ **Per-Lane Explanations** | Every lane reports the statistic that fired, the region it flagged, and its own confidence |
 | 📸 **Proof-of-Capture** | SHA-256 hash computed from raw file bytes at capture time |
 | ✍️ **Digital Signatures** | Ed25519 elliptic-curve key pair signing per device |
-| ⛓️ **Blockchain Anchoring** | Immutable proof stored on DataHaven Testnet (EVM, Chain 55931) via a custom Solidity smart contract |
+| ⛓️ **Blockchain Anchoring** | Immutable record on Ethereum Sepolia (Chain ID 11155111) — no contract deployment required |
 | ☁️ **Cloud Sync** | Proof records + thumbnails synced to Supabase (PostgreSQL + Object Storage) |
-| 🤖 **AI Deepfake Detection** | SightEngine API for deepfake, face-swap, and AI-generated content detection |
-| 🔍 **Plagiarism Check** | Reverse-image similarity analysis |
-| 📊 **Trust Score** | 0–100 weighted score with S / A / B / C / F grading |
-| 💧 **Watermarking** | Visible provenance overlay + invisible `PS-XXXX-XXXX` watermark ID |
-| 🔎 **3-Mode Verification** | Verify any media by blockchain TX hash, file hash, or image re-hash |
-| 📱 **Gallery Scanner** | Batch-scan every image on your phone (WhatsApp, Snapchat, Camera, etc.) and detect tampering |
+| 🔎 **3-Mode Verification** | Verify any prior result by blockchain TX hash, file hash, or image re-hash |
 | 🌙 **Dark / Light Theme** | Automatic system theme detection with custom palettes |
-| 📶 **Offline-First** | Local SQLite cache — full functionality without internet; syncs when online |
+| 📶 **Offline-First** | Local SQLite cache — capture and hashing work without internet; syncs when online |
 
 ---
 
@@ -89,27 +95,44 @@ ProofSnap creates an **unforgeable proof of capture** for every photo. The momen
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │                     React Native (Expo) App                       │
-├──────────────┬────────────┬───────────┬──────────┬───────────────┤
-│   Capture    │  Gallery   │  Scanner  │ Profile  │ Verify Proof  │
-│   Screen     │  Screen    │  Screen   │ Screen   │    Screen     │
-├──────────────┴────────────┴───────────┴──────────┴───────────────┤
+├──────────────┬───────────────┬──────────────┬────────────────────┤
+│   Capture    │    Results    │   Profile    │   Verify Proof     │
+│  ID + Selfie │  3-axis + why │  Wallet/Key  │  TX / hash / image │
+├──────────────┴───────────────┴──────────────┴────────────────────┤
 │                    Zustand State Management                       │
 ├──────────────────────────────────────────────────────────────────┤
-│                   7-Step Verification Pipeline                    │
-│  Hash → Sign → Blockchain → AI Detection → Trust Score →         │
-│  Watermark → Cloud Sync                                          │
-├──────────┬───────────┬──────────┬──────────┬────────┬────────────┤
-│  Crypto  │ Blockchain│    AI    │  Trust   │Watermark│  Supabase │
-│ Ed25519  │ ethers.js │SightEngine│ 0–100  │Overlay  │   Cloud   │
-│ SHA-256  │ DataHaven │ Deepfake │ Scoring │  + ID   │  Storage  │
-├──────────┴───────────┴──────────┴──────────┴────────┴────────────┤
-│    SQLite (local records)     │   Gallery Scanner DB              │
-├───────────────────────────────┴──────────────────────────────────┤
-│           Express.js Backend (Vercel) + Admin Dashboard           │
-├──────────────────────────────┬───────────────────────────────────┤
-│  DataHaven Testnet (EVM)     │  Supabase (PostgreSQL + Storage)  │
-│  MediaProof.sol Contract     │  Blockscout Explorer API          │
-│  Chain ID: 55931             │                                   │
+│                     Verification Pipeline                         │
+│  Quality Gate → Forensic Lanes → Face Match → Judge →            │
+│  Hash → Sign → Anchor → Cloud Sync                               │
+├──────────┬────────────────────────────────┬──────────┬───────────┤
+│  Crypto  │      Forensics (HTTP)          │Blockchain│ Supabase  │
+│ Ed25519  │                                │ethers.js │  Cloud    │
+│ SHA-256  │                                │ Sepolia  │ Storage   │
+├──────────┴────────────────────────────────┴──────────┴───────────┤
+│                    SQLite (local records)                         │
+└──────────────────────────────────────────────────────────────────┘
+                                 │
+                                 ▼
+┌──────────────────────────────────────────────────────────────────┐
+│              Python FastAPI Forensics Service  (service/)         │
+├──────────────────────────────────────────────────────────────────┤
+│  Quality Gate — resolution / blur / JPEG-quality floor            │
+│      ↓ (abstain if unreadable)                                    │
+│  Lane A  trained detector          (optional, requirements-ml)    │
+│  Lane B  noise residual            → too clean = synthetic        │
+│  Lane C  compression / ELA         → inconsistent = spliced       │
+│  Lane E  face embedding match      (optional, requirements-ml)    │
+│      ↓                                                            │
+│  Judge — cross-checks usable lanes, abstains on disagreement      │
+│      ↓                                                            │
+│  authenticity | identity | decision  + per-lane reasons           │
+└──────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────┬───────────────────────────────────┐
+│  Ethereum Sepolia (EVM)      │  Supabase (PostgreSQL + Storage)  │
+│  Data-only self-transfer     │  Blockscout v2 Explorer API       │
+│  (contract optional)         │                                   │
+│  Chain ID: 11155111          │                                   │
 └──────────────────────────────┴───────────────────────────────────┘
 ```
 
@@ -124,12 +147,12 @@ ProofSnap creates an **unforgeable proof of capture** for every photo. The momen
 | **Navigation** | Expo Router v6 (file-based routing) |
 | **State Management** | Zustand v5 |
 | **Cryptography** | SHA-256 (`expo-crypto`) + Ed25519 (`@noble/ed25519`) |
-| **Blockchain** | `ethers.js` v6 → DataHaven Testnet (EVM, Chain 55931) |
-| **Smart Contract** | Solidity 0.8.20 (`MediaProof.sol`) |
+| **Blockchain** | `ethers.js` v6 → Ethereum Sepolia (Chain ID 11155111) |
+| **Smart Contract** | Solidity 0.8.20 (`MediaProof.sol`) — optional, not deployed by default |
 | **Cloud Database** | Supabase (PostgreSQL + Object Storage) |
 | **Local Database** | `expo-sqlite` v16 |
-| **AI Detection** | SightEngine API (deepfake + AI-generated) |
-| **Backend** | Express.js + multer (deployed on Vercel) |
+| **Forensics Service** | Python + FastAPI (`service/`) — OpenCV, NumPy, SciPy, Pillow |
+| **Forensic Lanes** | Noise-residual + ELA/compression (training-free); trained detector and face match optional |
 | **Animations** | React Native Reanimated v4 |
 | **Styling** | NativeWind / Tailwind CSS v3 |
 | **Camera** | `expo-camera` v17 |
@@ -163,8 +186,8 @@ For a full walkthrough, see the [Demo Script](DEMO_SCRIPT.md).
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/ProofSnap.git
-cd ProofSnap
+git clone https://github.com/your-username/VeriLens.git
+cd VeriLens
 
 # Install dependencies
 npm install
@@ -189,25 +212,30 @@ npx expo start --android
 npx expo start --ios
 ```
 
-### Backend Server (Optional)
+### Forensics Service (Required for detection)
 
-The app works **fully offline** — without the backend, AI detection returns realistic simulated results.
+Detection runs in the Python service under `service/`. Without it the app can still capture, hash, sign, and anchor — but it cannot produce an authenticity or identity verdict.
 
 ```bash
-cd server
-npm install
-npm run dev
-# Server runs at http://localhost:3001
+cd service
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
+# Service runs at http://localhost:8000
 ```
 
-> See the [Full Setup Guide](SETUP.md) for detailed instructions on configuring DataHaven, Supabase, SightEngine, and Vercel deployment.
+Point the app at it with `EXPO_PUBLIC_API_BASE_URL` (defaults to `http://localhost:8000`).
+
+> The old Node backend in `server/` is deprecated and being removed — see [server/README.md](server/README.md).
+
+> See the [Full Setup Guide](SETUP.md) for detailed instructions on configuring Sepolia, Supabase, and the forensics service.
 
 ---
 
 ## 📁 Project Structure
 
 ```
-ProofSnap/
+VeriLens/
 ├── app/                        # Expo Router screens
 │   ├── _layout.tsx             # Root layout with onboarding guard
 │   ├── onboarding.tsx          # 3-page swipeable onboarding
@@ -223,39 +251,36 @@ ProofSnap/
 │       └── [id].tsx            # Verification detail view
 │
 ├── lib/                        # Core business logic
-│   ├── pipeline.ts             # 7-step verification orchestrator
+│   ├── pipeline.ts             # Verification orchestrator
 │   ├── crypto.ts               # Ed25519 key management + SHA-256 hashing
-│   ├── blockchain.ts           # DataHaven EVM integration (ethers.js)
-│   ├── ai-detection.ts         # SightEngine API proxy + simulation fallback
-│   ├── trust-score.ts          # Weighted trust scoring algorithm
-│   ├── watermark.ts            # Visible/invisible watermarking
+│   ├── blockchain.ts           # Sepolia integration (ethers.js + Blockscout v2)
+│   ├── ai-detection.ts         # Forensics service client
 │   ├── supabase.ts             # Supabase cloud integration
 │   ├── db.ts                   # Local SQLite database layer
-│   ├── gallery-scanner.ts      # Device gallery scanner + tamper detection
-│   ├── gallery-db.ts           # Gallery scanner persistence
 │   └── types.ts                # TypeScript interfaces
 │
+├── service/                    # Python FastAPI forensics service
+│   ├── config.py               # Every threshold that drives a verdict
+│   ├── lanes.py                # Quality gate + training-free lanes (B, C)
+│   └── requirements.txt        # Base deps (CPU-only, no torch)
+│
 ├── components/                 # Reusable UI components
-│   ├── TrustScoreCircle.tsx    # Animated circular score indicator
-│   ├── TrustBadge.tsx          # Grade badge (S/A/B/C/F)
 │   ├── VerificationSteps.tsx   # Pipeline step timeline
-│   └── MediaCard.tsx           # Gallery grid/list card
+│   └── MediaCard.tsx           # Result grid/list card
 │
 ├── stores/
 │   └── media-store.ts          # Zustand global state
 │
 ├── constants/
-│   ├── config.ts               # API URLs, blockchain config, keys
+│   ├── config.ts               # API URL, chain config (from EXPO_PUBLIC_* env)
 │   ├── Colors.ts               # Theme palettes
-│   ├── abi.ts                  # Smart contract ABI
+│   ├── abi.ts                  # Proof payload ABI
 │   └── theme.ts                # Theme constants
 │
 ├── contracts/
-│   └── MediaProof.sol          # Solidity smart contract (0.8.20)
+│   └── MediaProof.sol          # Optional Solidity contract (0.8.20)
 │
-├── server/                     # Express.js backend API
-│   ├── index.js                # API endpoints + admin dashboard
-│   └── package.json
+├── server/                     # DEPRECATED Express.js backend (being removed)
 │
 ├── hooks/                      # Custom React hooks
 │   └── useThemeColors.ts       # Dark/light theme hook
@@ -271,12 +296,12 @@ ProofSnap/
 
 ## 🔄 Verification Pipeline
 
-When you capture or import a photo, ProofSnap runs a **7-step verification pipeline** (orchestrated by `lib/pipeline.ts`):
+When you capture or import a photo, VeriLens runs a **7-step verification pipeline** (orchestrated by `lib/pipeline.ts`):
 
 ```
 Step 1: Hash       → SHA-256 digest of raw file bytes
 Step 2: Sign       → Ed25519 signature using device private key
-Step 3: Blockchain → Anchor proof on DataHaven (smart contract or data tx)
+Step 3: Blockchain → Anchor proof on Sepolia (smart contract or data tx)
 Step 4: AI Detect  → Deepfake + AI-generation analysis via SightEngine
 Step 5: Trust      → Compute weighted 0–100 trust score
 Step 6: Watermark  → Apply visible overlay + generate invisible ID
@@ -315,7 +340,7 @@ The trust score starts at **100** and applies weighted deductions:
 
 ## ⛓ Smart Contract
 
-**`contracts/MediaProof.sol`** — A Solidity 0.8.20 contract deployed on **DataHaven Testnet** (Chain ID `55931`).
+**`contracts/MediaProof.sol`** — A Solidity 0.8.20 contract deployed on **Sepolia Testnet** (Chain ID `11155111`).
 
 ### Contract Interface
 
@@ -350,12 +375,12 @@ struct Proof {
 
 | Field | Value |
 |-------|-------|
-| **Network** | DataHaven Testnet |
-| **RPC URL** | `https://services.datahaven-testnet.network/testnet` |
-| **Chain ID** | `55931` |
-| **Currency** | `MOCK` |
-| **Explorer** | `https://datahaven-testnet.explorer.caldera.xyz` |
-| **Faucet** | `https://apps.datahaven.xyz/faucet` |
+| **Network** | Sepolia Testnet |
+| **RPC URL** | `https://ethereum-sepolia-rpc.publicnode.com` |
+| **Chain ID** | `11155111` |
+| **Currency** | `SepoliaETH` |
+| **Explorer** | `https://eth-sepolia.blockscout.com` |
+| **Faucet** | `https://cloud.google.com/application/web3/faucet/ethereum/sepolia` |
 | **Compiler** | Solidity 0.8.20 |
 
 > See [SETUP.md](SETUP.md) for step-by-step deployment instructions via Remix IDE + MetaMask.
@@ -364,16 +389,18 @@ struct Proof {
 
 ## 🔧 External Services Setup
 
-ProofSnap is designed to work **fully offline** with simulated results. Enable real features by configuring these services one-by-one:
+Detection runs locally in the FastAPI service under `service/` — no API key, no
+third-party call, no simulated results. Everything below is optional and free.
 
 | Service | Purpose | Required? | Cost |
 |---------|---------|-----------|------|
-| **DataHaven Testnet** | Blockchain proof anchoring | No (simulated by default) | Free (testnet) |
-| **Supabase** | Cloud database + file storage | No (local SQLite used) | Free tier |
-| **SightEngine** | Real AI deepfake detection | No (simulated results) | Free (500 ops/month) |
-| **Render / Vercel** | Backend API hosting | No (simulated locally) | Free tier |
+| **Forensics service** (`service/`) | Detection + verdict | **Yes** — it is the detector | Free (self-hosted, CPU) |
+| **Sepolia Testnet** | Tamper-proof audit anchor | No (detection works without it) | Free (testnet) |
+| **Supabase** | Cloud case records + review queue | No (local SQLite used) | Free tier |
+| **HuggingFace Spaces** | Hosting for `service/` | No (runs locally) | Free tier (CPU) |
+| **SightEngine** | Baseline for side-by-side comparison only | No | Free trial |
 
-All configuration goes in **`constants/config.ts`** (mobile) and **`server/.env`** (backend).
+Configuration goes in `.env` as `EXPO_PUBLIC_*` variables (mobile, read by `constants/config.ts`) and `service/.env` (forensics service). No keys are committed.
 
 > Full setup guide with screenshots: [SETUP.md](SETUP.md)
 
@@ -408,7 +435,7 @@ Raw Photo Bytes → SHA-256 Hash → Ed25519 Signature → Blockchain Anchor
 
 1. **SHA-256 Hash** — Computed from raw file bytes at capture time using `expo-crypto`
 2. **Ed25519 Signature** — Device private key signs the hash; key stored in `expo-secure-store` (hardware-backed keychain)
-3. **Blockchain Anchor** — Hash + signature stored immutably on DataHaven via smart contract
+3. **Blockchain Anchor** — Hash + signature stored immutably on Sepolia via smart contract
 4. **Cloud Backup** — Proof record synced to Supabase PostgreSQL with Row Level Security
 
 ### Key Storage
@@ -449,7 +476,7 @@ Any modification to a file changes its SHA-256 hash → **broken chain of trust*
 | Service | Tier | Limit |
 |---------|------|-------|
 | Expo | Free | Unlimited |
-| DataHaven Testnet | Free | MOCK tokens from faucet |
+| Sepolia Testnet | Free | SepoliaETH from faucet |
 | Supabase | Free | 500 MB database, 1 GB storage |
 | SightEngine | Free | 500 operations/month |
 | Vercel / Render | Free | Serverless hosting |

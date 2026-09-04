@@ -1,65 +1,97 @@
 -- ═══════════════════════════════════════════════════════════
---  ProofSnap — Supabase Database Setup
+--  VeriLens — KYC Deepfake / AI-Image Detector
+--  Supabase Database Setup
 --  Run this in: Supabase Dashboard → SQL Editor → New Query
+--
+--  Safe to re-run: drops and recreates the kyc_cases table.
+--  WARNING: re-running deletes existing cases.
 -- ═══════════════════════════════════════════════════════════
 
--- 1. Create the proofs table
-CREATE TABLE IF NOT EXISTS proofs (
+-- 0. Retire the old proof-of-capture table (pre-KYC schema)
+DROP TABLE IF EXISTS proofs;
+
+-- 1. Create the kyc_cases table
+DROP TABLE IF EXISTS kyc_cases;
+
+CREATE TABLE IF NOT EXISTS kyc_cases (
   id TEXT PRIMARY KEY,
-  file_hash TEXT NOT NULL,
-  signature TEXT NOT NULL,
-  public_key TEXT NOT NULL,
-  blockchain_tx TEXT,
-  block_number BIGINT,
-  ai_deepfake_score REAL DEFAULT 0,
-  ai_generated_score REAL DEFAULT 0,
-  plagiarism_score REAL DEFAULT 0,
-  trust_score INTEGER DEFAULT 0,
-  trust_grade TEXT DEFAULT 'F',
-  file_type TEXT NOT NULL,
-  file_name TEXT NOT NULL,
-  file_size BIGINT DEFAULT 0,
-  image_url TEXT,
-  device_info TEXT,
-  status TEXT DEFAULT 'pending',
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+
+  -- Uploaded ID document
+  id_image_sha256 TEXT,
+  id_image_url TEXT,
+  id_image_attested BOOLEAN DEFAULT FALSE,
+
+  -- Uploaded selfie
+  selfie_sha256 TEXT,
+  selfie_url TEXT,
+  selfie_attested BOOLEAN DEFAULT FALSE,
+
+  -- Per-lane detector output, keyed by lane:
+  -- {"B": {"score":0.82,"confidence":0.7,"reasons":["..."],"box":[x,y,w,h]}, "C": {...}}
+  lanes JSONB,
+
+  -- Verdicts
+  authenticity TEXT CHECK (authenticity IN ('REAL', 'LIKELY_FAKE', 'INSUFFICIENT_EVIDENCE')),
+  identity     TEXT CHECK (identity     IN ('MATCH', 'MISMATCH', 'INDETERMINATE')),
+  decision     TEXT CHECK (decision     IN ('ACCEPT', 'REJECT', 'REVIEW')),
+  confidence   REAL,
+
+  -- Ordered explanation list: [{"lane":"B","text":"...","severity":"high"}]
+  reasons JSONB,
+
+  -- On-chain anchor
+  anchor_tx TEXT,
+  anchor_block BIGINT,
+  anchor_payload_hash TEXT,
+
+  -- Manual review outcome (NULL = never sent to review)
+  review_status TEXT CHECK (review_status IN ('pending', 'approved', 'rejected')),
+
+  device_info TEXT
 );
 
 -- 2. Enable Row Level Security
-ALTER TABLE proofs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE kyc_cases ENABLE ROW LEVEL SECURITY;
 
--- 3. Allow anyone to read proofs (for verification)
-CREATE POLICY "Proofs are publicly readable" ON proofs
+-- 3. Policies
+--  DEMO-GRADE: the mobile app talks to Supabase with the anon key, so anyone
+--  holding it can read and write every case. Fine for a demo, NOT for
+--  production — a real deployment needs auth + per-user policies
+--  (e.g. USING (auth.uid() = owner_id)) and a separate reviewer role.
+DROP POLICY IF EXISTS "KYC cases are publicly readable" ON kyc_cases;
+CREATE POLICY "KYC cases are publicly readable" ON kyc_cases
   FOR SELECT USING (true);
 
--- 4. Allow inserting proofs from anon key
-CREATE POLICY "Anyone can insert proofs" ON proofs
+DROP POLICY IF EXISTS "Anyone can insert KYC cases" ON kyc_cases;
+CREATE POLICY "Anyone can insert KYC cases" ON kyc_cases
   FOR INSERT WITH CHECK (true);
 
--- 5. Create indexes for fast lookups
-CREATE INDEX IF NOT EXISTS idx_proofs_file_hash ON proofs(file_hash);
-CREATE INDEX IF NOT EXISTS idx_proofs_status ON proofs(status);
-CREATE INDEX IF NOT EXISTS idx_proofs_created_at ON proofs(created_at DESC);
+-- 4. Create indexes for fast lookups
+CREATE INDEX IF NOT EXISTS idx_kyc_cases_decision      ON kyc_cases(decision);
+CREATE INDEX IF NOT EXISTS idx_kyc_cases_review_status ON kyc_cases(review_status);
+CREATE INDEX IF NOT EXISTS idx_kyc_cases_created_at    ON kyc_cases(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_kyc_cases_anchor_tx     ON kyc_cases(anchor_tx);
 
--- 6. Create storage bucket for media thumbnails (optional)
+-- 5. Create storage bucket for ID images and selfies
+--  NOTE: renamed from 'media' → 'kyc-media'. lib/supabase.ts must upload here.
 INSERT INTO storage.buckets (id, name, public)
-VALUES ('media', 'media', true)
+VALUES ('kyc-media', 'kyc-media', true)
 ON CONFLICT (id) DO NOTHING;
 
--- 7. Allow public access to media bucket
-CREATE POLICY "Public media access" ON storage.objects
-  FOR SELECT USING (bucket_id = 'media');
+-- 6. Allow public access to the kyc-media bucket
+--  DEMO-GRADE: public bucket means ID photos are readable by URL.
+--  Production should use a private bucket + signed URLs.
+DROP POLICY IF EXISTS "Public kyc-media access" ON storage.objects;
+CREATE POLICY "Public kyc-media access" ON storage.objects
+  FOR SELECT USING (bucket_id = 'kyc-media');
 
-CREATE POLICY "Anyone can upload media" ON storage.objects
-  FOR INSERT WITH CHECK (bucket_id = 'media');
+DROP POLICY IF EXISTS "Anyone can upload kyc-media" ON storage.objects;
+CREATE POLICY "Anyone can upload kyc-media" ON storage.objects
+  FOR INSERT WITH CHECK (bucket_id = 'kyc-media');
 
 -- ═══════════════════════════════════════════════════════════
 --  Done! Now go to Settings → API and copy:
 --  - Project URL  → paste in constants/config.ts as SUPABASE_URL
 --  - anon key     → paste in constants/config.ts as SUPABASE_ANON_KEY
 -- ═══════════════════════════════════════════════════════════
-
--- ═══════════════════════════════════════════════════════════
---  MIGRATION: If the table already exists without image_url, run:
--- ═══════════════════════════════════════════════════════════
--- ALTER TABLE proofs ADD COLUMN IF NOT EXISTS image_url TEXT;

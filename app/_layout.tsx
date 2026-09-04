@@ -12,7 +12,7 @@ import { useAppStore } from '@/stores/media-store';
 import { Colors } from '@/constants/Colors';
 
 // Custom dark theme matching our design
-const ProofSnapDark = {
+const VeriLensDark = {
   ...DarkTheme,
   colors: {
     ...DarkTheme.colors,
@@ -24,7 +24,7 @@ const ProofSnapDark = {
   },
 };
 
-const ProofSnapLight = {
+const VeriLensLight = {
   ...DefaultTheme,
   colors: {
     ...DefaultTheme.colors,
@@ -67,7 +67,7 @@ export default function RootLayout() {
   }
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? ProofSnapDark : ProofSnapLight}>
+    <ThemeProvider value={colorScheme === 'dark' ? VeriLensDark : VeriLensLight}>
       <Stack screenOptions={{ headerShown: false, animation: 'fade' }}>
         <Stack.Screen name="onboarding" />
         <Stack.Screen name="(tabs)" />

@@ -1,4 +1,4 @@
-// ProofSnap Theme & Color Constants
+// VeriLens Theme & Color Constants
 export const Colors = {
   primary: {
     50: '#EFF6FF',

@@ -5,7 +5,7 @@ let db: SQLite.SQLiteDatabase | null = null;
 
 export async function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (!db) {
-    db = await SQLite.openDatabaseAsync('proofsnap.db');
+    db = await SQLite.openDatabaseAsync('verilens.db');
     await initSchema();
   }
   return db;

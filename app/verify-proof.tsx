@@ -502,7 +502,7 @@ export default function VerifyProofScreen() {
                   <Text style={[styles.statusDesc, { color: colors.textSecondary }]}>
                     {result.proofFound
                       ? 'This media proof exists on Sepolia blockchain'
-                      : 'No matching proof found on-chain or in the ProofSnap database'}
+                      : 'No matching proof found on-chain or in the VeriLens database'}
                   </Text>
                 </View>
               </View>
@@ -648,7 +648,7 @@ export default function VerifyProofScreen() {
 
               {/* Supabase Record */}
               {result.supabaseProof && (
-                <ResultCard title="ProofSnap Cloud Record" icon="cloud-done" isDark={isDark} colors={colors}>
+                <ResultCard title="VeriLens Cloud Record" icon="cloud-done" isDark={isDark} colors={colors}>
                   <ResultRow
                     label="Trust Score"
                     value={`${result.supabaseProof.trust_score}/100 (Grade ${result.supabaseProof.trust_grade})`}

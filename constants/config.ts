@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════
-//  ProofSnap — App Configuration
+//  VeriLens — App Configuration
 //  Separated from Colors.ts for clarity
 // ═══════════════════════════════════════════════════════════
 //

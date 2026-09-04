@@ -94,7 +94,7 @@ export default function CaptureScreen() {
         <Ionicons name="camera-outline" size={64} color={colors.textSecondary} style={{ opacity: 0.5 }} />
         <Text style={[styles.permissionText, { color: colors.text }]}>Camera Access Required</Text>
         <Text style={[styles.permissionSubtext, { color: colors.textSecondary }]}>
-          ProofSnap needs camera access to capture and verify media authenticity.
+          VeriLens needs camera access to capture and verify media authenticity.
         </Text>
         <Pressable
           onPress={requestPermission}
@@ -129,7 +129,7 @@ export default function CaptureScreen() {
           <View style={styles.cameraModePill}>
             <View style={styles.liveDot} />
             <Ionicons name="camera" size={14} color="#FFFFFF" />
-            <Text style={styles.cameraModeText}>ProofSnap Camera</Text>
+            <Text style={styles.cameraModeText}>VeriLens Camera</Text>
           </View>
         </View>
       </LinearGradient>

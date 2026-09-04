@@ -81,7 +81,7 @@ export default function VerifyDetailScreen() {
         : '';
 
       await Share.share({
-        message: `ProofSnap Verification\n\nTrust Score: ${record.trustScore}/100 (Grade ${record.trustGrade})\nFile Hash: ${record.fileHash}${txLine}${explorerLine}${imageUrlLine}\n\nVerified by ProofSnap - Proof of Capture`,
+        message: `VeriLens Verification\n\nTrust Score: ${record.trustScore}/100 (Grade ${record.trustGrade})\nFile Hash: ${record.fileHash}${txLine}${explorerLine}${imageUrlLine}\n\nVerified by VeriLens - Proof of Capture`,
       });
     } catch {}
   };
@@ -168,7 +168,7 @@ export default function VerifyDetailScreen() {
               >
                 <View style={styles.watermarkBadge}>
                   <Ionicons name="shield-checkmark" size={16} color="#FFFFFF" />
-                  <Text style={styles.watermarkText}>ProofSnap Verified</Text>
+                  <Text style={styles.watermarkText}>VeriLens Verified</Text>
                   <Text style={styles.watermarkScore}>
                     {record.trustScore}/100
                   </Text>

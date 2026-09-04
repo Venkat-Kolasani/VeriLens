@@ -1,4 +1,4 @@
-# ProofSnap — 3-Minute Video Demo Script
+# VeriLens — 3-Minute Video Demo Script
 
 > **Total time:** ~3 minutes | **Tone:** Confident, slightly urgent, storytelling-driven  
 > **Tip:** Record screen + face cam. Show the real app on a phone/emulator throughout.
@@ -13,23 +13,23 @@
 >
 > *So here's the question — when someone shows you a photo, how do you **prove** it's real?*
 >
-> ***That's exactly what ProofSnap does."***
+> ***That's exactly what VeriLens does."***
 
 **[SCREEN: App splash / logo reveal — the # camera lens icon on dark background]**
 
 ---
 
-## PART 2 — What Is ProofSnap? (0:25 – 0:55)
+## PART 2 — What Is VeriLens? (0:25 – 0:55)
 
 **[SCREEN: Show the app home screen with the "Proof of Capture" tagline]**
 
-> *"ProofSnap is a mobile app that creates an **unforgeable proof of capture** for every photo you take. The moment you snap a picture, ProofSnap does four things in under 10 seconds:"*
+> *"VeriLens is a mobile app that creates an **unforgeable proof of capture** for every photo you take. The moment you snap a picture, VeriLens does four things in under 10 seconds:"*
 
 **[SCREEN: Open the Capture screen, take a photo, show the verification modal animating through steps]**
 
 > 1. *"**Generates a SHA-256 cryptographic hash** — a unique digital fingerprint of every pixel."*
 > 2. *"**Signs it with your device's Ed25519 key** — proving it came from YOUR phone."*
-> 3. *"**Anchors that proof on a real blockchain** — the DataHaven Testnet — making it permanent and tamper-proof."*
+> 3. *"**Anchors that proof on a real blockchain** — the Sepolia Testnet — making it permanent and tamper-proof."*
 > 4. *"**Runs AI deepfake analysis** — using SightEngine to detect manipulation, face-swaps, and AI generation."*
 
 > *"At the end, you get a **Trust Score out of 100** — a single number that tells you: is this media authentic?"*
@@ -48,7 +48,7 @@
 
 **[SCREEN: Verification modal appears — steps animate one by one: Hash → Sign → Blockchain → AI → Trust Score → Watermark → Cloud Sync]**
 
-> *"Watch — ProofSnap is hashing the file... signing it with my device key... and right now it's writing a transaction to the DataHaven blockchain. That transaction is permanent — no one can delete it, not even me."*
+> *"Watch — VeriLens is hashing the file... signing it with my device key... and right now it's writing a transaction to the Sepolia. That transaction is permanent — no one can delete it, not even me."*
 
 **[SCREEN: Verification complete, trust score shows]**
 
@@ -60,9 +60,9 @@
 
 > *"But here's where it gets powerful. Say someone sends you a photo and claims it's real. You can verify it three ways:"*
 >
-> - *"**Paste the blockchain transaction hash** — and ProofSnap pulls the on-chain proof directly."*
+> - *"**Paste the blockchain transaction hash** — and VeriLens pulls the on-chain proof directly."*
 > - *"**Enter the file hash** — and it cross-checks against our Supabase database."*
-> - *"**Or just drop the image itself** — ProofSnap re-hashes it and tells you if it matches any recorded proof."*
+> - *"**Or just drop the image itself** — VeriLens re-hashes it and tells you if it matches any recorded proof."*
 
 **[SCREEN: Show a verification result — green checkmark, hash match confirmed, on-chain proof found]**
 
@@ -72,7 +72,7 @@
 
 **[SCREEN: Open the Scanner tab → tap "Scan Gallery"]**
 
-> *"ProofSnap also has a gallery scanner. It scans every image on your phone — WhatsApp, Snapchat, Camera, Downloads — hashes them all, and detects if any files have been tampered with since they were first seen."*
+> *"VeriLens also has a gallery scanner. It scans every image on your phone — WhatsApp, Snapchat, Camera, Downloads — hashes them all, and detects if any files have been tampered with since they were first seen."*
 
 ---
 
@@ -85,7 +85,7 @@
 > - *"**React Native + Expo** — cross-platform mobile app"*
 > - *"**SHA-256 hashing** with `expo-crypto` — the same algorithm Bitcoin uses"*
 > - *"**Ed25519 digital signatures** from `@noble/ed25519` — military-grade elliptic curve cryptography"*
-> - *"**DataHaven Testnet** — a real EVM-compatible blockchain where we deploy a custom Solidity smart contract called `MediaProof.sol`"*
+> - *"**Sepolia Testnet** — a real EVM-compatible blockchain where we deploy a custom Solidity smart contract called `MediaProof.sol`"*
 > - *"**SightEngine API** — AI deepfake and AI-generated content detection"*
 > - *"**Supabase** — PostgreSQL database + cloud storage for proof records"*
 > - *"**SQLite** — offline-first local cache so the app works without internet"*
@@ -107,7 +107,7 @@
 > - *"**Social media platforms** — giving users a verified 'proof of capture' badge"*
 > - *"**Whistleblowers** — creating an immutable record that can't be denied or erased"*
 
-> *"In a world drowning in deepfakes, ProofSnap doesn't just detect fakes — it **proves originals**."*
+> *"In a world drowning in deepfakes, VeriLens doesn't just detect fakes — it **proves originals**."*
 
 ---
 
@@ -115,7 +115,7 @@
 
 **[SCREEN: Back to the home screen, then logo]**
 
-> *"ProofSnap. One tap to capture. One hash to prove it. One blockchain to make it permanent.*
+> *"VeriLens. One tap to capture. One hash to prove it. One blockchain to make it permanent.*
 >
 > ***Because in the age of AI, truth needs a receipt."***
 
@@ -131,15 +131,15 @@
 | **Background music** | Subtle tech/cinematic — try [Epidemic Sound](https://www.epidemicsound.com/) "Technology" category |
 | **Screen recording** | Use `scrcpy` or Expo Go on a physical device for best quality |
 | **Pacing tip** | The verification modal animation is your **hero moment** — let it breathe for 3–4 seconds |
-| **Closing slide** | Team name, GitHub repo link, "Built with React Native, DataHaven, Supabase" |
+| **Closing slide** | Team name, GitHub repo link, "Built with React Native, Sepolia, Supabase" |
 | **Captions** | Add subtitles — many hackathon judges watch on mute first |
 
 ---
 
 ### Key Phrases to Emphasize (for judge impact)
 
-- *"Mathematically impossible to hide tampering"*
+- *"It shows you which region it flagged, and why"*
 - *"The same cryptography Bitcoin uses"*
-- *"Real blockchain, not simulated"*
-- *"Truth needs a receipt"*
-- *"Proves originals, not just detects fakes"*
+- *"Real transaction on a public testnet — open it in the explorer"*
+- *"A wrong reject locks a real person out of their bank"*
+- *"It abstains instead of guessing when the image is too degraded to read"*

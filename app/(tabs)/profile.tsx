@@ -137,7 +137,7 @@ export default function ProfileScreen() {
           >
             <Ionicons name="shield-checkmark" size={36} color="#FFFFFF" />
           </LinearGradient>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>ProofSnap</Text>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>VeriLens</Text>
           <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
             Media Authentication System
           </Text>
@@ -267,7 +267,7 @@ export default function ProfileScreen() {
         {/* How It Works */}
         <Animated.View entering={FadeInDown.delay(800).springify()}>
           <View style={[styles.howItWorks, { backgroundColor: isDark ? Colors.dark.card : Colors.light.card, borderColor: isDark ? Colors.dark.border : Colors.light.border }]}>
-            <Text style={[styles.howTitle, { color: colors.text }]}>How ProofSnap Works</Text>
+            <Text style={[styles.howTitle, { color: colors.text }]}>How VeriLens Works</Text>
             {[
               { step: '1', text: 'Capture or import media', icon: 'camera' },
               { step: '2', text: 'Generate SHA-256 hash', icon: 'finger-print' },
