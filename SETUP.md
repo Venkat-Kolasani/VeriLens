@@ -70,7 +70,7 @@ address in the Profile tab. Fund **that** address, not your MetaMask account.
 
 ---
 
-## 2️⃣ Supabase Setup (Required for cloud storage)
+## 2️⃣ Supabase Setup (Optional)
 
 > Optional. Without it, every case is analysed and stored in local SQLite and
 > the verdict is identical — the pipeline marks the cloud step "Local only" and
