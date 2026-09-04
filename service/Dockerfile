@@ -1,4 +1,4 @@
-# ProofSnap forensics service — HuggingFace Spaces free CPU tier.
+# VeriLens forensics service — HuggingFace Spaces free CPU tier.
 # CPU-only, no model weights: the shipped lanes (B, C) are pure signal processing.
 FROM python:3.12-slim
 

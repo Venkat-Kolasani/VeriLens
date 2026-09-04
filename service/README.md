@@ -1,4 +1,4 @@
-# ProofSnap forensics service
+# VeriLens forensics service
 
 The detection brain behind a KYC deepfake / AI-generated image detector. A small
 FastAPI app that runs two training-free forensic lanes plus a quality gate over
