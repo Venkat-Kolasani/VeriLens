@@ -124,7 +124,7 @@ Supabase gives you a free PostgreSQL database + file storage.
 
 ---
 
-## 3️⃣ SightEngine AI Setup (Optional — for real AI detection)
+## 3️⃣ SightEngine Setup (Optional — comparison baseline only, NOT the detector)
 
 Detection does not depend on this. The lanes in `service/` are the detector; SightEngine is only used as a comparison baseline.
 
@@ -149,34 +149,51 @@ Detection does not depend on this. The lanes in `service/` are the detector; Sig
 
 ---
 
-## 4️⃣ Backend Server Deployment (Optional)
+## 4️⃣ Forensics Service (REQUIRED — it is the detector)
 
-The app works **fully offline** without the backend. The backend adds real AI detection + cloud API.
+Unlike everything above, this is not optional. `service/` is what actually
+analyses the images. The app cannot produce a verdict without it, and it will
+not invent one: if the service is unreachable the case is marked `failed` with
+every verdict field left `null`.
 
-### Local Development
+### Local run
 
 ```bash
-cd server
-npm install
-cp .env.example .env
-# Edit .env with your keys
-npm run dev
+cd service && python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
 ```
 
-Server runs at `http://localhost:3001`
+```bash
+cd service && .venv/bin/uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
 
-### Deploy to Render.com (Free)
+Check it:
 
-1. Push your code to GitHub
-2. Go to [render.com](https://render.com) → New Web Service
-3. Connect your GitHub repo
-4. Settings:
-   - Root directory: `server`
-   - Build command: `npm install`
-   - Start command: `npm start`
-5. Add environment variables (SIGHTENGINE_USER, SIGHTENGINE_SECRET, SUPABASE_URL, SUPABASE_KEY)
-6. Copy the Render URL (e.g., `https://verilens-api.onrender.com`)
-7. Update `API_BASE_URL` in `constants/config.ts`
+```bash
+curl -s http://localhost:8000/v1/health
+```
+
+Set `EXPO_PUBLIC_API_BASE_URL` in `.env` to match. **On a physical phone use
+your machine's LAN IP, not `localhost`** — the phone resolves `localhost` to
+itself:
+
+```bash
+ipconfig getifaddr en0
+```
+
+No model weights or API keys are needed. Lanes B and C are training-free.
+
+### Optional extras
+
+Lane A (trained synthesis detector) and Lane E (face match) need
+`requirements-ml.txt` plus, for Lane A, a checkpoint at
+`service/weights/lane_a.pt` from `train_lane_a.py`. Without them both lanes
+abstain with a reason and lanes B/C carry the verdict.
+
+### Deploy free on HuggingFace Spaces
+
+`service/Dockerfile` targets the free CPU tier and listens on port 7860.
+Create a Space with SDK "Docker", push `service/`, then point
+`EXPO_PUBLIC_API_BASE_URL` at the Space URL.
 
 ---
 
