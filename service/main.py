@@ -4,6 +4,7 @@ Endpoints:
   POST /v1/analyze         ID photo + selfie -> full verdict
   POST /v1/analyze/single  one image -> authenticity only
   GET  /v1/health
+  POST /v1/baseline        same image: baselines vs ours, side by side
   GET  /v1/model-card      thresholds, limits, and what we do NOT claim
 
 Runs CPU-only. No model weights required for lanes B/C, so the service is
@@ -18,6 +19,7 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from baseline import run_all as run_baselines
 from config import CFG
 from judge import Verdict, judge
 from lane_a import lane_a_synthesis
@@ -189,6 +191,59 @@ async def analyze(
         id_image=id_analysis,
         selfie=selfie_analysis,
     )
+
+
+@app.post("/v1/baseline")
+async def baseline(image: UploadFile = File(...)):
+    """Same image through the baselines and through our judge, side by side.
+
+    The comparison the demo turns on: a commercial detector returns one
+    number with no region and no reasoning, and on a locally-edited image
+    where the background is intact it has been measured at chance level.
+    Ours reports per-lane evidence and abstains when it cannot read the image.
+    """
+    data = await _read_upload(image)
+    analysis, q, results, _ = _analyze_one(data)
+    ours = judge(q, results)
+    baselines = await run_baselines(data, image.filename or "upload.jpg")
+
+    return {
+        "version": CFG.version,
+        "baselines": [
+            {
+                "name": b.name,
+                "available": b.available,
+                "score": b.score,
+                "verdict": b.verdict,
+                "detail": b.detail,
+                "reasons": b.reasons,
+                "explains_reasoning": False,
+                "localises_region": False,
+                "can_abstain": False,
+            }
+            for b in baselines
+        ],
+        "ours": {
+            "name": "VeriLens",
+            "available": True,
+            "authenticity": ours.authenticity,
+            "decision": ours.decision,
+            "score": ours.score,
+            "confidence": ours.confidence,
+            "confidence_is_calibrated": ours.confidence_is_calibrated,
+            "reasons": [asdict(r) for r in ours.reasons],
+            "lanes": [
+                {"lane": l.lane, "name": l.name, "score": round(l.score, 3),
+                 "confidence": round(l.confidence, 3), "usable": l.usable,
+                 "box": list(l.box) if l.box else None}
+                for l in results
+            ],
+            "explains_reasoning": True,
+            "localises_region": True,
+            "can_abstain": True,
+        },
+        "image": {"sha256": analysis.sha256, "width": analysis.width, "height": analysis.height},
+    }
 
 
 @app.get("/v1/health")
