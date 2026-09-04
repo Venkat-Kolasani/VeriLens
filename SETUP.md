@@ -72,6 +72,12 @@ address in the Profile tab. Fund **that** address, not your MetaMask account.
 
 ## 2️⃣ Supabase Setup (Required for cloud storage)
 
+> Optional. Without it, every case is analysed and stored in local SQLite and
+> the verdict is identical — the pipeline marks the cloud step "Local only" and
+> continues. This holds even when Supabase is configured but the schema has not
+> been run yet, so a missing table cannot break a demo.
+
+
 Supabase gives you a free PostgreSQL database + file storage.
 
 ### Step A: Create Supabase Project
