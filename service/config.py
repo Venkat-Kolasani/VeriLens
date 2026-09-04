@@ -34,6 +34,12 @@ class Config:
     min_usable_lanes: int = 2  # fewer than this and there is nothing to cross-check
     max_disagreement: float = 0.28  # spread above which lanes conflict -> abstain
     attested_bonus: float = 0.10  # attestation RAISES confidence only, never lowers
+    # The `attested` flag is currently ASSERTED BY THE CLIENT and is not
+    # cryptographically verified server-side. A hostile client can simply
+    # send attested=true, so honouring it would claim an injection defence
+    # that does not exist. Left off until the service issues a nonce that
+    # the device must sign over the image bytes; then flip this to True.
+    trust_client_attestation: bool = False
 
     # Cosine similarity on face embeddings (Lane E). Gap between them is the
     # inconclusive band -> REVIEW rather than a coin-flip identity call.

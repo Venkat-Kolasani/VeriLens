@@ -169,9 +169,20 @@ Four distinct conditions in `judge.py` produce it:
    in KYC a confidently wrong reject locks a real user out of their bank.
    `score` carries the aggregate.
 
-Attestation (`attested=true`) only ever *raises* confidence, by
-`attested_bonus` (0.10). Its **absence is never evidence of fakery** — almost
-every genuine photo carries no attestation.
+Attestation (`attested=true`) can only ever *raise* confidence, never lower it.
+Its **absence is never evidence of fakery** — almost every genuine photo on
+earth carries no attestation, so penalising its absence would fail real users
+en masse.
+
+**It currently grants nothing.** The flag is asserted by the client and the
+service cannot verify it, so `config.trust_client_attestation` is `False` and
+`attested_bonus` (0.10) is not applied. A hostile client would simply send
+`attested=true`; honouring that would advertise an injection defence that does
+not exist. The claim is still reported in `reasons[]` so the gap is visible
+rather than silently dropped.
+
+To make it real, the service must issue a nonce that the device signs over the
+image bytes, and verify that signature. Then flip the flag.
 
 ---
 
@@ -237,6 +248,8 @@ Straight from `known_limitations` in `/v1/model-card`:
   find when the whole frame was generated together.
 - No camera attribution and no PRNU reference database.
 - Absence of capture attestation is never treated as evidence of fakery.
+- The `attested` flag is client-asserted and NOT verified server-side, so it
+  grants no confidence bonus and is not yet an injection defence.
 - Heavily compressed or low-resolution images return `INSUFFICIENT_EVIDENCE` by
   design rather than a guess.
 - Lane A (trained local-synthesis detector) is not yet wired in.

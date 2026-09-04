@@ -183,6 +183,28 @@ def test_pair_without_face_match_never_accepts():
     print("ok  pair without face match routes to REVIEW")
 
 
+def test_unverified_attestation_grants_nothing():
+    """A claim the server cannot check must not buy confidence.
+
+    Honouring a client-asserted flag would advertise an injection defence
+    that does not exist: a hostile client just sends attested=true.
+    """
+    from lanes import LaneResult
+
+    pil, bgr = load_image(_jpeg_bytes(_textured(512, 512)))
+    q = quality_gate(pil, bgr)
+    lanes = [
+        LaneResult("B", "Noise residual", 0.05, 0.8),
+        LaneResult("C", "Compression / ELA", 0.10, 0.8),
+    ]
+    plain = judge(q, lanes, attested=False)
+    claimed = judge(q, lanes, attested=True)
+    assert not CFG.trust_client_attestation, "test assumes the flag is off"
+    assert claimed.confidence == plain.confidence, "unverified claim must not raise confidence"
+    assert any("cannot verify" in r.text for r in claimed.reasons), "gap must be reported"
+    print("ok  unverified attestation grants no bonus")
+
+
 if __name__ == "__main__":
     for fn in [
         test_jpeg_quality_roundtrip,
@@ -194,6 +216,7 @@ if __name__ == "__main__":
         test_attestation_never_lowers,
         test_identity_axis_independent,
         test_pair_without_face_match_never_accepts,
+        test_unverified_attestation_grants_nothing,
     ]:
         fn()
     print("\nall checks passed")

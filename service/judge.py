@@ -132,8 +132,18 @@ def judge(
     if attested:
         # Attestation RAISES confidence only. Its absence is never evidence
         # of fakery -- almost every genuine photo carries no attestation.
-        base_conf = min(1.0, base_conf + CFG.attested_bonus)
-        reasons.append(Reason("D", "Image was captured live in-app with a signed device attestation.", "info"))
+        if CFG.trust_client_attestation:
+            base_conf = min(1.0, base_conf + CFG.attested_bonus)
+            reasons.append(
+                Reason("D", "Image was captured live in-app with a verified device attestation.", "info")
+            )
+        else:
+            # Claimed but unverifiable, so it earns nothing. Reported anyway
+            # so the gap is visible rather than silently ignored.
+            reasons.append(
+                Reason("D", "Client claims live in-app capture, but the service cannot verify "
+                            "it yet (no signed nonce). Claim recorded, confidence unchanged.", "info")
+            )
 
     if agg >= CFG.fake_above:
         authenticity: Authenticity = "LIKELY_FAKE"

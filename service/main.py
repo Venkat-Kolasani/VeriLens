@@ -226,6 +226,10 @@ def model_card():
             "image with globally uniform statistics can pass both.",
             "No camera attribution and no PRNU reference database.",
             "Absence of capture attestation is never treated as evidence of fakery.",
+            "The `attested` flag is asserted by the client and is NOT verified "
+            "server-side, so it currently grants no confidence bonus. It is not an "
+            "injection defence until the service issues a nonce the device must "
+            "sign over the image bytes (config.trust_client_attestation).",
             "Heavily compressed or low-resolution images return "
             "INSUFFICIENT_EVIDENCE by design rather than a guess.",
             "Lane A (trained local-synthesis detector) is wired in but needs both "
