@@ -81,6 +81,14 @@ DROP POLICY IF EXISTS "Anyone can insert KYC cases" ON kyc_cases;
 CREATE POLICY "Anyone can insert KYC cases" ON kyc_cases
   FOR INSERT WITH CHECK (true);
 
+--  Reviewers approve/reject from the review queue, which is an UPDATE.
+--  Without this policy the write is silently dropped: PostgREST returns 200
+--  with an empty array and the decision never reaches the shared case file,
+--  leaving the audit trail incomplete while the UI looks like it worked.
+DROP POLICY IF EXISTS "Anyone can update KYC cases" ON kyc_cases;
+CREATE POLICY "Anyone can update KYC cases" ON kyc_cases
+  FOR UPDATE USING (true) WITH CHECK (true);
+
 -- 4. Create indexes for fast lookups
 CREATE INDEX IF NOT EXISTS idx_kyc_cases_decision      ON kyc_cases(decision);
 CREATE INDEX IF NOT EXISTS idx_kyc_cases_review_status ON kyc_cases(review_status);

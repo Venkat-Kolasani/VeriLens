@@ -38,6 +38,32 @@ FACE_DATASET = "celebahq"
 DATASETS = ("CelebAHQ", "CityScapes", "OpenImages", "SUN_RGBD")
 
 
+def _find_split_root(root: Path, split: str) -> Path:
+    """Locate the directory containing `{split}/data`, wherever it is nested.
+
+    Mount layouts differ: a Kaggle script kernel exposed this dataset at
+    /kaggle/input/datasets/<owner>/<slug>/inpainting_exchange/, not at the
+    usual /kaggle/input/<slug>/. Rather than encode any single guess, search
+    for the marker directory and fail loudly with what was actually present.
+    """
+    direct = root / "inpainting_exchange" / split
+    if (direct / "data").is_dir():
+        return direct
+    if (root / split / "data").is_dir():
+        return root / split
+
+    for cand in sorted(root.rglob(split)):
+        if (cand / "data").is_dir():
+            return cand
+
+    seen = sorted({str(p.relative_to(root)) for p in root.glob("*/*")})[:25]
+    raise SystemExit(
+        f"Could not locate '{split}/data' anywhere under {root}.\n"
+        f"Top-level entries seen: {seen}\n"
+        "Pass --data pointing at the mount root, or fix _find_split_root()."
+    )
+
+
 def discover(root: Path, split: str) -> tuple[list[dict], list[Path]]:
     """Find mask-paired edits, plus untouched originals to use as negatives.
 
@@ -52,12 +78,7 @@ def discover(root: Path, split: str) -> tuple[list[dict], list[Path]]:
     `_simple` suffix marks the exchanged variant. So splitting an exchanged
     stem on `_{DATASET}_` recovers the mask stem exactly.
     """
-    base = root / "inpainting_exchange" / split
-    if not base.exists():  # some mounts nest one level deeper
-        found = next((p.parent for p in root.rglob(f"{split}/data") if p.is_dir()), None)
-        if found is None:
-            raise SystemExit(f"Could not locate {split} under {root}")
-        base = found
+    base = _find_split_root(root, split)
 
     pairs: list[dict] = []
     originals: list[Path] = []

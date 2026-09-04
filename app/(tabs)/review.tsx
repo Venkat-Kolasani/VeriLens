@@ -17,6 +17,7 @@ import * as Haptics from 'expo-haptics';
 import { Colors } from '@/constants/Colors';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { getCasesForReview, updateCase } from '@/lib/db';
+import { updateCaseReviewOnSupabase } from '@/lib/supabase';
 import { useAppStore } from '@/stores/media-store';
 import { VerdictPill, formatConfidence, verdictColor } from '@/components/Verdict';
 import type { KYCCase, ReviewStatus } from '@/lib/types';
@@ -58,7 +59,11 @@ export default function ReviewScreen() {
         ? Haptics.ImpactFeedbackStyle.Medium
         : Haptics.ImpactFeedbackStyle.Heavy
     );
-    await updateCase(id, { reviewStatus });
+    const updatedAt = new Date().toISOString();
+    await updateCase(id, { reviewStatus, updatedAt });
+    // Mirror to the shared case file. Non-fatal: the local record already has
+    // the decision, and the cloud is optional.
+    await updateCaseReviewOnSupabase(id, reviewStatus, updatedAt);
     await load();
     await refreshStats();
   };

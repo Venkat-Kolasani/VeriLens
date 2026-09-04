@@ -1,6 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@/constants/config';
-import type { KYCCase, LaneOut, VerdictReason } from './types';
+import type { KYCCase, LaneOut, ReviewStatus, VerdictReason } from './types';
 
 // ──────────────── Supabase Client ────────────────
 
@@ -65,6 +65,34 @@ export interface SupabaseCase {
 }
 
 // ──────────────── Insert Case ────────────────
+
+/** Push a reviewer's decision to the shared case file.
+ *
+ *  The audit story depends on this: a decision recorded only in local SQLite
+ *  is invisible to everyone else looking at the case. Non-fatal - the local
+ *  record is already updated by the caller.
+ */
+export async function updateCaseReviewOnSupabase(
+  id: string,
+  reviewStatus: ReviewStatus,
+  updatedAt: string
+): Promise<boolean> {
+  if (!isSupabaseConfigured()) return false;
+  try {
+    const { error } = await getSupabase()
+      .from(TABLE)
+      .update({ review_status: reviewStatus, updated_at: updatedAt })
+      .eq('id', id);
+    if (error) {
+      console.warn('[Supabase] Review update failed:', error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn('[Supabase] Review update failed:', err);
+    return false;
+  }
+}
 
 export async function uploadCaseToSupabase(kycCase: KYCCase): Promise<boolean> {
   if (!isSupabaseConfigured()) {
