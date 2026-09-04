@@ -54,11 +54,15 @@ address in the Profile tab. Fund **that** address, not your MetaMask account.
    - Click **Deploy**
    - Confirm the transaction in MetaMask
 6. Copy the deployed contract address (looks like `0x1234...abcd`)
-7. Open `constants/config.ts` in your code
-8. Replace the CONTRACT_ADDRESS:
+7. Open `constants/config.ts` and set `CONTRACT_ADDRESS` to the deployed address:
    ```typescript
    export const CONTRACT_ADDRESS: string = '0xYOUR_DEPLOYED_ADDRESS_HERE';
    ```
+
+   This is the one value that stays in source rather than `.env` — a contract
+   address is public, not a secret. Leaving it as the zero address is the
+   supported default: anchoring then uses a data-only self-transfer and no
+   deployment is needed at all.
 
 ### Step D: Verify It Works
 
@@ -106,8 +110,8 @@ Supabase gives you a free PostgreSQL database + file storage.
 
 ### Step D: Add Keys to Your App
 
-1. Open `constants/config.ts`
-2. Replace the placeholder values:
+1. Create `.env` in the project root: `cp .env.example .env`
+2. Fill in:
    ```
    EXPO_PUBLIC_SUPABASE_URL=https://abc123.supabase.co
    EXPO_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR...
