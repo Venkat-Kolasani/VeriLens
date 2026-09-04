@@ -35,8 +35,8 @@
 - [Getting Started](#-getting-started)
 - [Project Structure](#-project-structure)
 - [Verification Pipeline](#-verification-pipeline)
-- [Verdicts & Abstention](#-verdicts--abstention)
-- [Smart Contract (Optional)](#-smart-contract-optional)
+- [Verdict Model](#-verdict-model)
+- [Smart Contract](#-smart-contract)
 - [External Services Setup](#-external-services-setup)
 - [API Reference](#-api-reference)
 - [Security Architecture](#-security-architecture)
@@ -312,31 +312,39 @@ Each step reports its status in real-time to the UI via progress callbacks. Step
 
 ---
 
-## 📊 Trust Score Algorithm
+## 📊 Verdict Model
 
-The trust score starts at **100** and applies weighted deductions:
+There is no single 0–100 score. Three axes are reported independently, because
+collapsing them hides the distinction that matters: *"a real photo of the wrong
+person"* and *"an AI-generated photo of the right person"* are different
+failures needing different handling.
 
-| Factor | Condition | Penalty |
-|--------|-----------|---------|
-| **Hash integrity** | Hash not verified | **-50** |
-| **Signature** | Signature invalid | **-30** |
-| **Blockchain** | Not anchored on-chain | **-10** |
-| **Deepfake score** | > 0.7 / > 0.4 / > 0.2 | **-40 / -20 / -5** |
-| **AI-generated score** | > 0.7 / > 0.4 / > 0.2 | **-30 / -15 / -3** |
-| **Plagiarism** | > 50% / > 30% | **-20 / -10** |
-| **Metadata** | Has metadata | **+2 bonus** |
+| Axis | Values |
+|------|--------|
+| `authenticity` | `REAL` · `LIKELY_FAKE` · `INSUFFICIENT_EVIDENCE` |
+| `identity` | `MATCH` · `MISMATCH` · `INDETERMINATE` · `null` (single image — not applicable) |
+| `decision` | `ACCEPT` · `REJECT` · `REVIEW` |
 
-### Grade Scale
+`decision` folds both: `LIKELY_FAKE` or `MISMATCH` → `REJECT`; `INDETERMINATE`
+identity → `REVIEW`; otherwise `ACCEPT`. Every abstention routes to `REVIEW`,
+never to a guess.
 
-| Grade | Score Range | Meaning |
-|-------|-------------|---------|
-| **S** | 95 – 100 | Pristine — cryptographically perfect |
-| **A** | 80 – 94 | Verified authentic |
-| **B** | 60 – 79 | Minor concerns |
-| **C** | 40 – 59 | Significant issues |
-| **F** | 0 – 39 | Failed verification |
+### When it abstains
 
----
+Four independent conditions produce `INSUFFICIENT_EVIDENCE`:
+
+1. **Quality gate** — resolution, blur or JPEG quality below the floor. Forensic
+   traces live in high-frequency detail; once destroyed, no honest verdict exists.
+2. **Too few usable lanes** — fewer than two lanes could read the image, so
+   nothing cross-checks anything.
+3. **Lane disagreement** — lanes conflict beyond the spread threshold. Averaging
+   a genuine conflict away manufactures false confidence.
+4. **Uncertainty band** — the aggregate score falls between the real and fake
+   thresholds.
+
+A pair check whose identity cannot be verified routes to `REVIEW` rather than
+`ACCEPT`. In KYC a confidently wrong reject locks a real person out of their
+bank account, so refusing to answer is the correct output, not a cop-out.
 
 ## ⛓ Smart Contract
 
@@ -408,20 +416,21 @@ Configuration goes in `.env` as `EXPO_PUBLIC_*` variables (mobile, read by `cons
 
 ## 📡 API Reference
 
-The Express.js backend (deployed on Vercel) exposes these endpoints:
+The Python FastAPI forensics service (`service/`) exposes these endpoints.
+Full detail, curl examples and thresholds: [service/README.md](service/README.md).
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/api/health` | Health check |
-| `POST` | `/api/detect` | AI deepfake detection (SightEngine proxy / simulation) |
-| `POST` | `/api/plagiarism` | Plagiarism check |
-| `POST` | `/api/verify` | Verify proof against Supabase |
-| `GET` | `/api/verify/:hash` | Lookup proof by file hash |
-| `GET` | `/api/proofs` | Recent proofs feed |
-| `POST` | `/api/upload-image` | Upload image to Supabase Storage |
-| `GET` | `/admin` | Admin monitoring dashboard |
+| `POST` | `/v1/analyze` | Full KYC check — `id_image` + `selfie` (multipart), `?attested=` |
+| `POST` | `/v1/analyze/single` | One image, authenticity only |
+| `GET` | `/v1/health` | Health check |
+| `GET` | `/v1/model-card` | Thresholds, calibration status, known limitations |
 
-The backend includes a built-in **admin dashboard** with login, real-time stats, filterable request logs, and auto-refresh.
+Every response carries the three verdict axes plus `reasons[]`, where each
+reason names the lane that produced it. `confidence_is_calibrated` is `false`
+until a held-out calibration set exists — while it is false, the confidence
+number is raw lane agreement and must not be read as a probability.
+
 
 ---
 
