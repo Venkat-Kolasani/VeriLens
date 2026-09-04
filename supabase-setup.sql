@@ -105,7 +105,9 @@ CREATE POLICY "Anyone can upload kyc-media" ON storage.objects
   FOR INSERT WITH CHECK (bucket_id = 'kyc-media');
 
 -- ═══════════════════════════════════════════════════════════
---  Done! Now go to Settings → API and copy:
---  - Project URL  → paste in constants/config.ts as SUPABASE_URL
---  - anon key     → paste in constants/config.ts as SUPABASE_ANON_KEY
+--  Done! Now go to Settings → API and copy into .env (NOT into source):
+--  - Project URL  → EXPO_PUBLIC_SUPABASE_URL
+--  - anon key     → EXPO_PUBLIC_SUPABASE_ANON_KEY
+--  Use the anon key only. The service_role key bypasses every policy above
+--  and would ship inside the app bundle.
 -- ═══════════════════════════════════════════════════════════
