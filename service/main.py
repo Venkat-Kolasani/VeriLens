@@ -20,6 +20,7 @@ from pydantic import BaseModel
 
 from config import CFG
 from judge import Verdict, judge
+from lane_a import lane_a_synthesis
 from lane_face import face_similarity
 from lanes import lane_b_noise, lane_c_compression, load_image, quality_gate
 
@@ -104,7 +105,7 @@ def _analyze_one(data: bytes):
         raise HTTPException(400, f"Could not decode image: {e}") from e
 
     q = quality_gate(pil, bgr)
-    results = [lane_b_noise(bgr), lane_c_compression(pil, bgr)]
+    results = [lane_a_synthesis(bgr), lane_b_noise(bgr), lane_c_compression(pil, bgr)]
     h, w = bgr.shape[:2]
 
     analysis = ImageAnalysis(
@@ -209,6 +210,10 @@ def model_card():
              "reads": "regions unnaturally noise-free for their detail level"},
             {"id": "C", "name": "Compression / ELA", "trained": False,
              "reads": "recompression error inconsistent with local detail"},
+            {"id": "A", "name": "Local synthesis", "trained": True,
+             "reads": "patch-level locally synthesised content; trained on INP-X "
+                      "exchanged images so it cannot use the global VAE artifact",
+             "optional_deps": "requirements-ml.txt + weights/lane_a.pt"},
             {"id": "E", "name": "Face match", "trained": True,
              "reads": "cosine similarity between ID and selfie face embeddings",
              "optional_deps": "requirements-ml.txt"},
@@ -223,7 +228,9 @@ def model_card():
             "Absence of capture attestation is never treated as evidence of fakery.",
             "Heavily compressed or low-resolution images return "
             "INSUFFICIENT_EVIDENCE by design rather than a guess.",
-            "Lane A (trained local-synthesis detector) is not yet wired in.",
+            "Lane A (trained local-synthesis detector) is wired in but needs both "
+            "requirements-ml.txt and a trained weights/lane_a.pt checkpoint. Without "
+            "either it abstains, leaving lanes B and C to carry the verdict.",
             "Lane E (face match) is wired in but its dependencies are optional. "
             "Without requirements-ml.txt installed no similarity is computed, so "
             "a pair check reports identity=INDETERMINATE and routes to REVIEW "
