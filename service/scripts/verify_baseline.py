@@ -34,7 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from baseline import sightengine  # noqa: E402
 from judge import judge  # noqa: E402
 from lanes import lane_b_noise, lane_c_compression, load_image, quality_gate  # noqa: E402
-from train_lane_a import find_triplets  # noqa: E402
+from train_lane_a import discover  # noqa: E402
 
 
 def ours(data: bytes) -> str:
@@ -57,18 +57,24 @@ async def main() -> None:
         print("A free trial account is enough for this sample size.")
         raise SystemExit(1)
 
-    triplets = find_triplets(args.data)
-    random.Random(args.seed).shuffle(triplets)
-    triplets = triplets[: args.n]
-    print(f"{len(triplets)} triplets -> {len(triplets) * 3} API calls\n")
+    pairs, originals = discover(args.data, "test-data")
+    rnd = random.Random(args.seed)
+    rnd.shuffle(pairs)
+    rnd.shuffle(originals)
+    pairs = pairs[: args.n]
+    originals = originals[: args.n]
+    print(f"{len(pairs)} edits + {len(originals)} originals "
+          f"-> ~{len(pairs) * 2 + len(originals)} API calls\n")
 
-    # category -> (expected label, path index into the triplet)
-    categories = {"real": ("REAL", 0), "inpainted": ("FAKE", 1), "exchanged": ("FAKE", 2)}
+    categories = {
+        "real": ("REAL", [(o, None) for o in originals]),
+        "inpainted": ("FAKE", [(p["inpainted"], None) for p in pairs if p["inpainted"]]),
+        "exchanged": ("FAKE", [(p["exchanged"], None) for p in pairs]),
+    }
     tally = {c: {"base_ok": 0, "ours_ok": 0, "ours_abstain": 0, "n": 0} for c in categories}
 
-    for i, triplet in enumerate(triplets, 1):
-        for cat, (expected, idx) in categories.items():
-            path = triplet[idx]
+    for cat, (expected, items) in categories.items():
+        for i, (path, _) in enumerate(items, 1):
             data = path.read_bytes()
 
             b = await sightengine(data, path.name)
@@ -85,7 +91,7 @@ async def main() -> None:
                 t["ours_ok"] += 1
             elif o == "ABSTAIN":
                 t["ours_abstain"] += 1
-        print(f"  {i}/{len(triplets)}", end="\r", flush=True)
+            print(f"  {cat} {i}/{len(items)}   ", end="\r", flush=True)
 
     print("\n")
     print(f"{'category':<12}{'n':>5}{'baseline':>11}{'ours':>9}{'ours abstain':>15}")

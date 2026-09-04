@@ -34,6 +34,10 @@ import numpy as np
 PATCH = 224
 FACE_DATASET = "celebahq"
 
+# ImageNet normalisation; must match lane_a.py inference.
+MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
+STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+
 
 DATASETS = ("CelebAHQ", "CityScapes", "OpenImages", "SUN_RGBD")
 
@@ -151,6 +155,69 @@ def sample_patches(img: np.ndarray, mask: np.ndarray | None, n: int, rng: random
         # 0.02..0.30 -> ambiguous, dropped on purpose
 
 
+def _load_mask(mask_path, shape):
+    import cv2
+
+    m = cv2.imread(str(mask_path), cv2.IMREAD_GRAYSCALE)
+    if m is None:
+        return None
+    if m.shape[:2] != shape:
+        m = cv2.resize(m, (shape[1], shape[0]), interpolation=cv2.INTER_NEAREST)
+    return (m > 127).astype(np.uint8)
+
+
+class Patches:
+    """One patch per index, decoded on demand.
+
+    Materialising every patch up front cost ~13 GB on the face-only split and
+    OOM-killed a 12.7 GB Colab runtime. Defined at module level so DataLoader
+    worker processes can pickle it.
+
+    Returns numpy; the default collate converts to tensors, which keeps torch
+    out of this module's import path.
+    """
+
+    def __init__(self, recs, per_image: int, seed: int):
+        self.recs = recs
+        self.per = per_image
+        self.seed = seed
+
+    def __len__(self):
+        return len(self.recs) * self.per
+
+    def source(self, i: int) -> str:
+        return self.recs[i // self.per][2]
+
+    def __getitem__(self, i):
+        import cv2
+
+        ri, k = divmod(i, self.per)
+        img_path, mask_path, _ = self.recs[ri]
+        r = random.Random(hash((self.seed, ri, k)) & 0xFFFFFFFF)
+
+        img = cv2.imread(str(img_path))
+        if img is None or min(img.shape[:2]) < PATCH:
+            return np.zeros((3, PATCH, PATCH), np.float32), np.zeros(1, np.float32)
+
+        mask = _load_mask(mask_path, img.shape[:2]) if mask_path is not None else None
+
+        crop, label = None, 0.0
+        for _ in range(8):  # retry: 2-30% overlaps are ambiguous and skipped
+            for c, l in sample_patches(img, mask, 1, r):
+                crop, label = c, l
+                break
+            if crop is not None:
+                break
+        if crop is None:
+            h, w = img.shape[:2]
+            y, x = r.randint(0, h - PATCH), r.randint(0, w - PATCH)
+            crop = img[y:y + PATCH, x:x + PATCH]
+            label = 0.0 if mask is None else float(mask[y:y + PATCH, x:x + PATCH].mean() > 0.5)
+
+        x_ = (crop[..., ::-1].astype(np.float32) / 255.0 - MEAN) / STD
+        return x_.transpose(2, 0, 1).copy(), np.array([label], dtype=np.float32)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", type=Path, required=True)
@@ -169,13 +236,10 @@ def main() -> None:
     import cv2
     import timm
     import torch
-    from torch.utils.data import DataLoader, Dataset
+    from torch.utils.data import DataLoader
 
     rng = random.Random(args.seed)
     torch.manual_seed(args.seed)
-
-    mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
-    std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
     def load_split(split: str):
         pairs, originals = discover(args.data, split)
@@ -200,54 +264,27 @@ def main() -> None:
         if n or m:
             print(f"  {ds:<12} train {n:>6}  val {m:>6}")
 
-    def build(pairs, originals, train: bool):
-        """(patch, label, source) where source is 'exchanged'/'inpainted'/'original'."""
+    # Records, not decoded patches. Materialising every patch up front cost
+    # ~13 GB for the face-only split and OOM-killed a 12.7 GB Colab runtime,
+    # so images are decoded and sampled lazily in __getitem__ instead.
+    def records(pairs, originals, train: bool):
         out = []
         for rec in pairs:
             reps = args.face_weight if (train and rec["dataset"] == "CelebAHQ") else 1
-            exc = cv2.imread(str(rec["exchanged"]))
-            mask_img = cv2.imread(str(rec["mask"]), cv2.IMREAD_GRAYSCALE)
-            if exc is None or mask_img is None:
-                continue
-            if mask_img.shape[:2] != exc.shape[:2]:
-                mask_img = cv2.resize(mask_img, (exc.shape[1], exc.shape[0]),
-                                      interpolation=cv2.INTER_NEAREST)
-            mask = (mask_img > 127).astype(np.uint8)
-            if mask.mean() < 1e-4:
-                continue
-            inp = cv2.imread(str(rec["inpainted"])) if rec["inpainted"] else None
             for _ in range(reps):
-                # exchanged: local content only, global VAE artifact removed.
-                # This is the case incumbent detectors fail, so it carries
-                # the most weight in how we judge the model.
-                for c, l in sample_patches(exc, mask, args.patches_per_image, rng):
-                    out.append((c, l, "exchanged"))
-                if inp is not None and inp.shape[:2] == mask.shape[:2]:
-                    for c, l in sample_patches(inp, mask, args.patches_per_image, rng):
-                        out.append((c, l, "inpainted"))
-        for op in originals:
-            img = cv2.imread(str(op))
-            if img is None:
-                continue
-            for c, l in sample_patches(img, None, args.patches_per_image, rng):
-                out.append((c, l, "original"))
+                out.append((rec["exchanged"], rec["mask"], "exchanged"))
+                if rec["inpainted"] is not None:
+                    out.append((rec["inpainted"], rec["mask"], "inpainted"))
+        out += [(op, None, "original") for op in originals]
         rng.shuffle(out)
         return out
 
-    class Patches(Dataset):
-        def __init__(self, items): self.items = items
-        def __len__(self): return len(self.items)
-        def __getitem__(self, i):
-            crop, label, _ = self.items[i]
-            x = (crop[..., ::-1].astype(np.float32) / 255.0 - mean) / std
-            return torch.from_numpy(x.transpose(2, 0, 1).copy()), torch.tensor([label])
-
-    print("\ndecoding images and sampling patches...")
-    train_items = build(train_pairs, train_orig, True)
-    val_items = build(val_pairs, val_orig, False)
-    train_ds, val_ds = Patches(train_items), Patches(val_items)
-    pos = sum(1 for _, l, _ in train_items if l > 0.5)
-    print(f"train patches {len(train_items)} ({pos} positive) | val {len(val_items)}")
+    train_recs = records(train_pairs, train_orig, True)
+    val_recs = records(val_pairs, val_orig, False)
+    train_ds = Patches(train_recs, args.patches_per_image, args.seed)
+    val_ds = Patches(val_recs, args.patches_per_image, args.seed + 1)
+    print(f"train {len(train_recs)} images -> {len(train_ds)} patches | "
+          f"val {len(val_recs)} images -> {len(val_ds)} patches")
     if not len(train_ds) or not len(val_ds):
         raise SystemExit("Empty patch set. Check --patches-per-image and the mask threshold.")
 
@@ -283,7 +320,7 @@ def main() -> None:
             for x, y in vl:
                 pred = (torch.sigmoid(model(x.to(dev))) > 0.5).float().cpu()
                 for j in range(y.shape[0]):
-                    src = val_items[idx][2]
+                    src = val_ds.source(idx)
                     by[src][1] += 1
                     if pred[j].item() == y[j].item():
                         by[src][0] += 1
@@ -293,7 +330,10 @@ def main() -> None:
         print(f"epoch {ep+1}: overall {overall:.4f} | " +
               " | ".join(f"{k} {accs[k]:.4f} (n={by[k][1]})" for k in accs))
 
-        if accs["exchanged"] > best:
+        # Always save the first epoch. Guarding only on improvement meant a
+        # run whose first-epoch exchanged accuracy was 0.0 never wrote a
+        # checkpoint at all, and failed later with a bare "no checkpoint".
+        if accs["exchanged"] > best or ep == 0:
             best = accs["exchanged"]
             args.out.parent.mkdir(parents=True, exist_ok=True)
             torch.save(
