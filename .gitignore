@@ -58,3 +58,8 @@ service/data/
 *.pt
 *.pth
 *.onnx
+
+# kaggle job scaffolding (generated) + api token
+service/kaggle_job/
+service/kaggle_train/
+.kaggle/
