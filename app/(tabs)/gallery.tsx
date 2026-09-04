@@ -17,51 +17,51 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { useAppStore } from '@/stores/media-store';
-import { MediaCard } from '@/components/MediaCard';
-import type { MediaRecord } from '@/lib/types';
+import { CaseCard } from '@/components/CaseCard';
+import type { Decision, KYCCase } from '@/lib/types';
 
 const { width } = Dimensions.get('window');
 const CARD_GAP = 12;
 const CARD_WIDTH = (width - 40 - CARD_GAP) / 2;
 
-type FilterType = 'all' | 'verified' | 'pending' | 'failed';
+type FilterType = 'all' | Decision;
 
 export default function GalleryScreen() {
   const insets = useSafeAreaInsets();
   const { isDark, colors } = useThemeColors();
-  const { records, loadRecords } = useAppStore();
+  const { cases, loadCases } = useAppStore();
   const [filter, setFilter] = useState<FilterType>('all');
   const [refreshing, setRefreshing] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
-      loadRecords();
+      loadCases();
     }, [])
   );
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadRecords();
+    await loadCases();
     setRefreshing(false);
   };
 
   const filtered = filter === 'all'
-    ? records
-    : records.filter((r) => r.status === filter);
+    ? cases
+    : cases.filter((c) => c.decision === filter);
 
   const filters: { key: FilterType; label: string; icon: string }[] = [
     { key: 'all', label: 'All', icon: 'apps' },
-    { key: 'verified', label: 'Verified', icon: 'checkmark-circle' },
-    { key: 'pending', label: 'Pending', icon: 'time' },
-    { key: 'failed', label: 'Failed', icon: 'close-circle' },
+    { key: 'ACCEPT', label: 'Accepted', icon: 'checkmark-circle' },
+    { key: 'REVIEW', label: 'Review', icon: 'alert-circle' },
+    { key: 'REJECT', label: 'Rejected', icon: 'close-circle' },
   ];
 
-  const renderItem = ({ item, index }: { item: MediaRecord; index: number }) => (
+  const renderItem = ({ item, index }: { item: KYCCase; index: number }) => (
     <Animated.View
       entering={FadeInDown.delay(index * 60).springify()}
       style={{ width: CARD_WIDTH }}
     >
-      <MediaCard record={item} />
+      <CaseCard kycCase={item} />
     </Animated.View>
   );
 
@@ -71,14 +71,14 @@ export default function GalleryScreen() {
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <View style={styles.headerRow}>
           <View>
-            <Text style={[styles.title, { color: colors.text }]}>Gallery</Text>
+            <Text style={[styles.title, { color: colors.text }]}>Cases</Text>
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              {filtered.length} {filter === 'all' ? 'total' : filter} items
+              {filtered.length} {filter === 'all' ? 'total' : filter.toLowerCase()} cases
             </Text>
           </View>
           <View style={[styles.countBadge, { backgroundColor: isDark ? 'rgba(59,130,246,0.1)' : 'rgba(59,130,246,0.06)' }]}>
             <Ionicons name="images" size={16} color={Colors.primary[500]} />
-            <Text style={[styles.countText, { color: Colors.primary[500] }]}>{records.length}</Text>
+            <Text style={[styles.countText, { color: Colors.primary[500] }]}>{cases.length}</Text>
           </View>
         </View>
       </View>
@@ -134,10 +134,10 @@ export default function GalleryScreen() {
             <Ionicons name="images-outline" size={40} color={Colors.primary[400]} />
           </View>
           <Text style={[styles.emptyText, { color: colors.text }]}>
-            {filter === 'all' ? 'No verified media yet' : `No ${filter} items`}
+            {filter === 'all' ? 'No KYC cases yet' : `No ${filter.toLowerCase()} cases`}
           </Text>
           <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>
-            Capture or import media to see it here
+            Run a check on an ID document and selfie to see it here
           </Text>
         </View>
       ) : (

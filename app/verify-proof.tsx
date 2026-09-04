@@ -28,8 +28,10 @@ import {
   fetchTransactionFromExplorer,
   type ExplorerTxResult,
 } from '@/lib/blockchain';
-import { verifyProofOnSupabase, verifyProofByTxHash, type SupabaseProof } from '@/lib/supabase';
+import { verifyCaseByImageHash, verifyCaseByTxHash, type SupabaseCase } from '@/lib/supabase';
 import { hashMediaFile } from '@/lib/crypto';
+import { formatConfidence, verdictColor } from '@/components/Verdict';
+import type { Authenticity, Decision, Identity } from '@/lib/types';
 
 const { width } = Dimensions.get('window');
 
@@ -42,7 +44,7 @@ interface VerificationResult {
   // Blockchain
   explorerResult?: ExplorerTxResult;
   // Supabase
-  supabaseProof?: SupabaseProof | null;
+  cloudCase?: SupabaseCase | null;
   // Image hash (if mode=image)
   computedHash?: string;
   // Overall
@@ -127,9 +129,10 @@ export default function VerifyProofScreen() {
         const explorerResult = await fetchTransactionFromExplorer(txHash);
 
         // 2. Check Supabase for matching proof
-        const supabaseProof = await verifyProofByTxHash(txHash);
+        const cloudCase = await verifyCaseByTxHash(txHash);
 
-        // 3. Cross-check: if user also entered a file hash, compare
+        // 3. Cross-check: the anchored payload is the VERDICT digest, so a
+        //    typed hash is compared against that, not against an image hash.
         let hashMatch: boolean | undefined;
         if (fileHashInput.trim() && explorerResult.decodedProof) {
           const inputHash = fileHashInput.trim().toLowerCase().replace(/^0x/, '');
@@ -141,7 +144,7 @@ export default function VerifyProofScreen() {
           mode: 'tx',
           searchQuery: txHash,
           explorerResult,
-          supabaseProof,
+          cloudCase,
           hashMatch,
           proofFound: explorerResult.found,
         });
@@ -149,25 +152,25 @@ export default function VerifyProofScreen() {
         // ── Verify by File Hash ──
         const hash = fileHashInput.trim().replace(/^0x/, '');
         if (!hash || hash.length < 16) {
-          Alert.alert('Invalid Input', 'Please enter a valid SHA-256 file hash.');
+          Alert.alert('Invalid Input', 'Please enter a valid SHA-256 image hash.');
           return;
         }
 
         // 1. Search Supabase for matching proof
-        const supabaseProof = await verifyProofOnSupabase(hash);
+        const cloudCase = await verifyCaseByImageHash(hash);
 
         // 2. If Supabase has a blockchain_tx, verify on explorer
         let explorerResult: ExplorerTxResult | undefined;
-        if (supabaseProof?.blockchain_tx) {
-          explorerResult = await fetchTransactionFromExplorer(supabaseProof.blockchain_tx);
+        if (cloudCase?.anchor_tx) {
+          explorerResult = await fetchTransactionFromExplorer(cloudCase.anchor_tx);
         }
 
         setResult({
           mode: 'hash',
           searchQuery: hash,
           explorerResult,
-          supabaseProof,
-          proofFound: !!supabaseProof,
+          cloudCase,
+          proofFound: !!cloudCase,
         });
       } else if (mode === 'image') {
         // ── Verify by Image ──
@@ -180,19 +183,23 @@ export default function VerifyProofScreen() {
         const computedHash = await hashMediaFile(imageUri);
 
         // 2. Search Supabase by the computed hash
-        const supabaseProof = await verifyProofOnSupabase(computedHash);
+        const cloudCase = await verifyCaseByImageHash(computedHash);
 
         // 3. If Supabase has a blockchain_tx, verify on explorer
         let explorerResult: ExplorerTxResult | undefined;
-        if (supabaseProof?.blockchain_tx) {
-          explorerResult = await fetchTransactionFromExplorer(supabaseProof.blockchain_tx);
+        if (cloudCase?.anchor_tx) {
+          explorerResult = await fetchTransactionFromExplorer(cloudCase.anchor_tx);
         }
 
-        // 4. Cross-check hashes
+        // 4. Cross-check against the case's stored image hashes. (Comparing
+        //    an image hash to the on-chain payload would always fail: what is
+        //    anchored is the verdict digest, not the image.)
         let hashMatch: boolean | undefined;
-        if (explorerResult?.decodedProof) {
-          const chainHash = explorerResult.decodedProof.fileHash.toLowerCase().replace(/^0x/, '');
-          hashMatch = computedHash.toLowerCase() === chainHash;
+        if (cloudCase) {
+          const lower = computedHash.toLowerCase();
+          hashMatch =
+            cloudCase.id_image_sha256?.toLowerCase() === lower ||
+            cloudCase.selfie_sha256?.toLowerCase() === lower;
         }
 
         setResult({
@@ -200,9 +207,9 @@ export default function VerifyProofScreen() {
           searchQuery: imageUri,
           computedHash,
           explorerResult,
-          supabaseProof,
+          cloudCase,
           hashMatch,
-          proofFound: !!supabaseProof,
+          proofFound: !!cloudCase,
         });
       }
     } catch (err: any) {
@@ -226,7 +233,7 @@ export default function VerifyProofScreen() {
 
   const modes: { key: SearchMode; label: string; icon: string }[] = [
     { key: 'tx', label: 'By TX Hash', icon: 'link' },
-    { key: 'hash', label: 'By File Hash', icon: 'finger-print' },
+    { key: 'hash', label: 'By Image Hash', icon: 'finger-print' },
     { key: 'image', label: 'By Image', icon: 'image' },
   ];
 
@@ -249,7 +256,7 @@ export default function VerifyProofScreen() {
             <View style={{ flex: 1 }}>
               <Text style={[styles.title, { color: colors.text }]}>Verify Proof</Text>
               <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-                Check if media is anchored on Sepolia
+                Check if a KYC verdict is anchored on Sepolia
               </Text>
             </View>
           </Animated.View>
@@ -340,7 +347,7 @@ export default function VerifyProofScreen() {
                     </Pressable>
                   </View>
                   <Text style={[styles.inputHint, { color: colors.textSecondary }]}>
-                    Optionally enter a file hash below to cross-verify
+                    Optionally enter the verdict digest below to cross-verify
                   </Text>
                   <TextInput
                     style={[
@@ -352,7 +359,7 @@ export default function VerifyProofScreen() {
                         marginTop: 8,
                       },
                     ]}
-                    placeholder="File hash (optional)"
+                    placeholder="Verdict digest (optional)"
                     placeholderTextColor={colors.textSecondary}
                     value={fileHashInput}
                     onChangeText={setFileHashInput}
@@ -366,7 +373,7 @@ export default function VerifyProofScreen() {
               {mode === 'hash' && (
                 <>
                   <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>
-                    SHA-256 FILE HASH
+                    SHA-256 IMAGE HASH
                   </Text>
                   <View style={styles.inputRow}>
                     <TextInput
@@ -497,12 +504,12 @@ export default function VerifyProofScreen() {
                       { color: result.proofFound ? Colors.success : Colors.danger },
                     ]}
                   >
-                    {result.proofFound ? 'Proof Found!' : 'Proof Not Found'}
+                    {result.proofFound ? 'Case Found' : 'Case Not Found'}
                   </Text>
                   <Text style={[styles.statusDesc, { color: colors.textSecondary }]}>
                     {result.proofFound
-                      ? 'This media proof exists on Sepolia blockchain'
-                      : 'No matching proof found on-chain or in the VeriLens database'}
+                      ? 'A KYC case matching this input exists on-chain / in the VeriLens cloud'
+                      : 'No matching case found on-chain or in the VeriLens cloud'}
                   </Text>
                 </View>
               </View>
@@ -532,8 +539,8 @@ export default function VerifyProofScreen() {
                     ]}
                   >
                     {result.hashMatch
-                      ? 'File hash matches the on-chain proof — image is authentic!'
-                      : 'Hash mismatch — the image may have been tampered with'}
+                      ? 'Hash matches the anchored payload — this input is the one that was checked'
+                      : 'Hash mismatch — this is not the payload that was anchored'}
                   </Text>
                 </View>
               )}
@@ -620,7 +627,7 @@ export default function VerifyProofScreen() {
               {result.explorerResult?.decodedProof && (
                 <ResultCard title="Decoded Proof Data" icon="lock-open" isDark={isDark} colors={colors}>
                   <ResultRow
-                    label="Anchored File Hash"
+                    label="Anchored Verdict Digest"
                     value={result.explorerResult.decodedProof.fileHash}
                     copiable
                     onCopy={() => copy(result.explorerResult!.decodedProof!.fileHash, 'File Hash')}
@@ -646,49 +653,75 @@ export default function VerifyProofScreen() {
                 </ResultCard>
               )}
 
-              {/* Supabase Record */}
-              {result.supabaseProof && (
-                <ResultCard title="VeriLens Cloud Record" icon="cloud-done" isDark={isDark} colors={colors}>
+              {/* Cloud case record */}
+              {result.cloudCase && (
+                <ResultCard title="VeriLens Cloud Case" icon="cloud-done" isDark={isDark} colors={colors}>
+                  <View style={styles.axisRow}>
+                    {([
+                      ['Authenticity', result.cloudCase.authenticity as Authenticity | null],
+                      ['Identity', result.cloudCase.identity as Identity | null],
+                      ['Decision', result.cloudCase.decision as Decision | null],
+                    ] as const).map(([label, value]) => (
+                      <View key={label} style={styles.axisChip}>
+                        <Text style={[styles.axisChipLabel, { color: colors.textSecondary }]}>
+                          {label}
+                        </Text>
+                        <Text style={[styles.axisChipValue, { color: verdictColor(value) }]}>
+                          {value ? value.replace(/_/g, ' ') : 'NOT ASSESSED'}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
                   <ResultRow
-                    label="Trust Score"
-                    value={`${result.supabaseProof.trust_score}/100 (Grade ${result.supabaseProof.trust_grade})`}
+                    label="Confidence"
+                    value={formatConfidence(
+                      result.cloudCase.confidence,
+                      result.cloudCase.confidence_is_calibrated
+                    )}
                     colors={colors}
                     isDark={isDark}
                   />
+                  {(result.cloudCase.reasons ?? []).map((reason, i) => (
+                    <ResultRow
+                      key={`${reason.lane}-${i}`}
+                      label={`Reason · ${reason.lane}`}
+                      value={reason.text}
+                      colors={colors}
+                      isDark={isDark}
+                    />
+                  ))}
                   <ResultRow
-                    label="AI Deepfake"
-                    value={`${(result.supabaseProof.ai_deepfake_score * 100).toFixed(1)}%`}
-                    colors={colors}
-                    isDark={isDark}
-                  />
-                  <ResultRow
-                    label="AI Generated"
-                    value={`${(result.supabaseProof.ai_generated_score * 100).toFixed(1)}%`}
-                    colors={colors}
-                    isDark={isDark}
-                  />
-                  <ResultRow
-                    label="File Name"
-                    value={result.supabaseProof.file_name}
+                    label="Review Status"
+                    value={result.cloudCase.review_status ?? 'Not sent to review'}
                     colors={colors}
                     isDark={isDark}
                   />
                   <ResultRow
                     label="Created"
-                    value={new Date(result.supabaseProof.created_at).toLocaleString()}
+                    value={new Date(result.cloudCase.created_at).toLocaleString()}
                     colors={colors}
                     isDark={isDark}
                   />
-                  {result.supabaseProof.image_url && (
+                  {result.cloudCase.id_image_url && (
                     <Pressable
-                      onPress={() =>
-                        Linking.openURL(result.supabaseProof!.image_url!)
-                      }
+                      onPress={() => Linking.openURL(result.cloudCase!.id_image_url!)}
                       style={[styles.explorerLink, { backgroundColor: isDark ? Colors.dark.elevated : Colors.light.elevated }]}
                     >
                       <Ionicons name="image-outline" size={16} color={Colors.primary[500]} />
                       <Text style={[styles.explorerLinkText, { color: Colors.primary[500] }]}>
-                        View Original Image
+                        View ID Document
+                      </Text>
+                      <Ionicons name="open-outline" size={14} color={Colors.primary[500]} />
+                    </Pressable>
+                  )}
+                  {result.cloudCase.selfie_url && (
+                    <Pressable
+                      onPress={() => Linking.openURL(result.cloudCase!.selfie_url!)}
+                      style={[styles.explorerLink, { backgroundColor: isDark ? Colors.dark.elevated : Colors.light.elevated }]}
+                    >
+                      <Ionicons name="person-outline" size={16} color={Colors.primary[500]} />
+                      <Text style={[styles.explorerLinkText, { color: Colors.primary[500] }]}>
+                        View Selfie
                       </Text>
                       <Ionicons name="open-outline" size={14} color={Colors.primary[500]} />
                     </Pressable>
@@ -780,6 +813,17 @@ function ResultRow({
 const styles = StyleSheet.create({
   container: { flex: 1 },
   scroll: { paddingHorizontal: 16, paddingBottom: 20 },
+
+  // Verdict axes inside the cloud-case card
+  axisRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
+  axisChip: { flex: 1, gap: 2 },
+  axisChipLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  axisChipValue: { fontSize: 11, fontWeight: '900', letterSpacing: 0.2 },
 
   // Header
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 },

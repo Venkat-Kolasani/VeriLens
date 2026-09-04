@@ -16,46 +16,50 @@ import { useLocalSearchParams } from 'expo-router';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
-import { LinearGradient } from 'expo-linear-gradient';
 
-import { Colors, GRADES, getGrade } from '@/constants/Colors';
+import { Colors } from '@/constants/Colors';
 import { BLOCK_EXPLORER, CHAIN_ID, CHAIN_NAME, CHAIN_RPC } from '@/constants/config';
 import { useThemeColors } from '@/hooks/useThemeColors';
-import { getRecordById } from '@/lib/db';
-import type { MediaRecord } from '@/lib/types';
-import { TrustScoreCircle } from '@/components/TrustScoreCircle';
+import { getCaseById } from '@/lib/db';
+import type { KYCCase } from '@/lib/types';
+import {
+  LaneScores,
+  VerdictAxes,
+  VerdictPill,
+  VerdictReasons,
+  formatConfidence,
+  verdictColor,
+} from '@/components/Verdict';
 
 const { width } = Dimensions.get('window');
 
-export default function VerifyDetailScreen() {
+export default function CaseDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { isDark, colors } = useThemeColors();
-  const [record, setRecord] = useState<MediaRecord | null>(null);
+  const [kycCase, setCase] = useState<KYCCase | null>(null);
   const [showTxModal, setShowTxModal] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
-    crypto: true,
-    blockchain: true,
-    ai: true,
-    originality: false,
+    reasons: true,
+    lanes: true,
+    crypto: false,
+    signature: false,
+    anchor: true,
     device: false,
   });
 
   useEffect(() => {
     if (id) {
-      getRecordById(id).then(setRecord);
+      getCaseById(id).then(setCase);
     }
   }, [id]);
 
-  if (!record) {
+  if (!kycCase) {
     return (
       <View style={[styles.container, styles.center, { backgroundColor: colors.background }]}>
         <Text style={{ color: colors.textSecondary }}>Loading...</Text>
       </View>
     );
   }
-
-  const grade = getGrade(record.trustScore);
-  const gradeInfo = GRADES[grade];
 
   const toggleSection = (key: string) => {
     setExpandedSections((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -70,18 +74,20 @@ export default function VerifyDetailScreen() {
 
   const handleShare = async () => {
     try {
-      const imageUrlLine = record.imageUrl
-        ? `\nImage URL: ${record.imageUrl}`
-        : '';
-      const txLine = record.blockchainTx
-        ? `\nBlockchain Tx: ${record.blockchainTx}`
-        : '\nBlockchain: Pending';
-      const explorerLine = record.blockchainTx
-        ? `\nExplorer: ${BLOCK_EXPLORER}/tx/${record.blockchainTx}`
-        : '';
-
+      const anchorLine = kycCase.anchorTx
+        ? `\nAnchored: ${BLOCK_EXPLORER}/tx/${kycCase.anchorTx}`
+        : '\nAnchor: not on-chain';
       await Share.share({
-        message: `VeriLens Verification\n\nTrust Score: ${record.trustScore}/100 (Grade ${record.trustGrade})\nFile Hash: ${record.fileHash}${txLine}${explorerLine}${imageUrlLine}\n\nVerified by VeriLens - Proof of Capture`,
+        message:
+          `VeriLens KYC case ${kycCase.id}\n\n` +
+          `Authenticity: ${kycCase.authenticity ?? 'NO VERDICT'}\n` +
+          `Identity: ${kycCase.identity ?? 'NOT ASSESSED'}\n` +
+          `Decision: ${kycCase.decision ?? 'NONE'}\n` +
+          `${formatConfidence(kycCase.confidence, kycCase.confidenceIsCalibrated)}\n` +
+          `ID image SHA-256: ${kycCase.idImageSha256}\n` +
+          `Selfie SHA-256: ${kycCase.selfieSha256}\n` +
+          `Verdict digest: ${kycCase.anchorPayloadHash ?? 'not computed'}` +
+          anchorLine,
       });
     } catch {}
   };
@@ -141,63 +147,77 @@ export default function VerifyDetailScreen() {
     </View>
   );
 
-  const ScoreBar = ({ label, score, color }: { label: string; score: number; color: string }) => (
-    <View style={styles.scoreBarContainer}>
-      <View style={styles.scoreBarHeader}>
-        <Text style={[styles.scoreBarLabel, { color: colors.textSecondary }]}>{label}</Text>
-        <Text style={[styles.scoreBarValue, { color }]}>{(score * 100).toFixed(1)}%</Text>
-      </View>
-      <View style={[styles.scoreBarTrack, { backgroundColor: isDark ? Colors.dark.elevated : Colors.light.elevated }]}>
-        <View style={[styles.scoreBarFill, { width: `${Math.min(score * 100, 100)}%`, backgroundColor: color }]} />
-      </View>
-    </View>
-  );
+  const statusLabel =
+    kycCase.status === 'complete'
+      ? 'Complete'
+      : kycCase.status === 'failed'
+      ? 'No verdict'
+      : kycCase.status === 'analyzing'
+      ? 'Analyzing'
+      : 'Pending';
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {/* Hero Image */}
+        {/* Hero: the two images that make the case */}
         <Animated.View entering={FadeInDown.delay(100).springify()}>
           <View style={styles.heroContainer}>
-            <Image source={{ uri: record.fileUri }} style={styles.heroImage} resizeMode="cover" />
-            {/* Watermark overlay preview */}
-            <View style={styles.watermarkOverlay}>
-              <LinearGradient
-                colors={['transparent', 'rgba(0,0,0,0.7)']}
-                style={styles.watermarkGradient}
-              >
-                <View style={styles.watermarkBadge}>
-                  <Ionicons name="shield-checkmark" size={16} color="#FFFFFF" />
-                  <Text style={styles.watermarkText}>VeriLens Verified</Text>
-                  <Text style={styles.watermarkScore}>
-                    {record.trustScore}/100
-                  </Text>
-                </View>
-                <Text style={styles.watermarkHash}>
-                  #{record.fileHash.substring(0, 12)}
-                </Text>
-              </LinearGradient>
+            <View style={styles.heroPane}>
+              <Image source={{ uri: kycCase.idImageUri }} style={styles.heroImage} resizeMode="cover" />
+              <Text style={styles.heroCaption}>
+                ID document{kycCase.idImageAttested ? ' · camera' : ' · imported'}
+              </Text>
             </View>
-            {/* Status pill */}
+            <View style={styles.heroPane}>
+              <Image source={{ uri: kycCase.selfieUri }} style={styles.heroImage} resizeMode="cover" />
+              <Text style={styles.heroCaption}>
+                Selfie{kycCase.selfieAttested ? ' · camera' : ''}
+              </Text>
+            </View>
             <View
               style={[
                 styles.statusPill,
                 {
                   backgroundColor:
-                    record.status === 'verified' ? Colors.success : record.status === 'failed' ? Colors.danger : Colors.warning,
+                    kycCase.status === 'complete'
+                      ? Colors.success
+                      : kycCase.status === 'failed'
+                      ? Colors.danger
+                      : Colors.warning,
                 },
               ]}
             >
-              <Text style={styles.statusText}>
-                {record.status === 'verified' ? 'Verified' : record.status === 'failed' ? 'Failed' : 'Pending'}
-              </Text>
+              <Text style={styles.statusText}>{statusLabel}</Text>
             </View>
           </View>
         </Animated.View>
 
-        {/* Trust Score */}
-        <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.scoreContainer}>
-          <TrustScoreCircle score={record.trustScore} size={150} />
+        {/* The three axes */}
+        <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.axesContainer}>
+          <VerdictAxes
+            authenticity={kycCase.authenticity}
+            identity={kycCase.identity}
+            decision={kycCase.decision}
+            confidence={kycCase.confidence}
+            isCalibrated={kycCase.confidenceIsCalibrated}
+          />
+          {kycCase.reviewStatus && (
+            <View style={styles.reviewRow}>
+              <Text style={[styles.reviewLabel, { color: colors.textSecondary }]}>
+                Manual review
+              </Text>
+              <VerdictPill
+                value={
+                  kycCase.reviewStatus === 'approved'
+                    ? 'ACCEPT'
+                    : kycCase.reviewStatus === 'rejected'
+                    ? 'REJECT'
+                    : 'REVIEW'
+                }
+                size="sm"
+              />
+            </View>
+          )}
         </Animated.View>
 
         {/* Action Buttons */}
@@ -206,17 +226,14 @@ export default function VerifyDetailScreen() {
             onPress={handleShare}
             style={({ pressed }) => [
               styles.actionButton,
-              {
-                backgroundColor: Colors.primary[500],
-                opacity: pressed ? 0.9 : 1,
-              },
+              { backgroundColor: Colors.primary[500], opacity: pressed ? 0.9 : 1 },
             ]}
           >
             <Ionicons name="share-outline" size={18} color="#FFFFFF" />
-            <Text style={styles.actionButtonText}>Share Proof</Text>
+            <Text style={styles.actionButtonText}>Share Case</Text>
           </Pressable>
 
-          {record.blockchainTx && (
+          {kycCase.anchorTx && (
             <Pressable
               onPress={() => setShowTxModal(true)}
               style={({ pressed }) => [
@@ -233,103 +250,111 @@ export default function VerifyDetailScreen() {
           )}
         </Animated.View>
 
-        {/* Cryptographic Proof */}
-        <Section id="crypto" icon="finger-print" title="Cryptographic Proof" delay={400}>
-          <DataRow
-            label="File Hash (SHA-256)"
-            value={record.fileHash}
-            onCopy={() => copyText(record.fileHash, 'Hash')}
-          />
-          <DataRow
-            label="Digital Signature"
-            value={record.signature.substring(0, 40) + '...'}
-            onCopy={() => copyText(record.signature, 'Signature')}
-          />
-          <DataRow
-            label="Public Key"
-            value={record.publicKey.substring(0, 40) + '...'}
-            onCopy={() => copyText(record.publicKey, 'Public Key')}
-          />
+        {/* Why — the explanation is the product */}
+        <Section id="reasons" icon="list" title="Why this verdict" delay={400}>
+          <VerdictReasons reasons={kycCase.reasons} lanes={kycCase.lanes} />
         </Section>
 
-        {/* Blockchain Record */}
-        <Section id="blockchain" icon="link" title="Blockchain Record" delay={500}>
+        {/* Per-lane detector scores */}
+        <Section id="lanes" icon="pulse" title="Detector lanes" delay={500}>
+          <LaneScores lanes={kycCase.lanes} />
+        </Section>
+
+        {/* On-chain anchor */}
+        <Section id="anchor" icon="link" title="Verdict anchor" delay={600}>
+          <DataRow
+            label="Verdict digest (SHA-256)"
+            value={kycCase.anchorPayloadHash ?? 'Not computed'}
+            onCopy={
+              kycCase.anchorPayloadHash
+                ? () => copyText(kycCase.anchorPayloadHash!, 'Verdict digest')
+                : undefined
+            }
+          />
           <DataRow
             label="Transaction Hash"
-            value={record.blockchainTx ?? 'Pending'}
-            onCopy={record.blockchainTx ? () => copyText(record.blockchainTx!, 'Tx Hash') : undefined}
+            value={kycCase.anchorTx ?? 'Not anchored'}
+            onCopy={kycCase.anchorTx ? () => copyText(kycCase.anchorTx!, 'Tx Hash') : undefined}
           />
-          <DataRow label="Block Number" value={record.blockNumber?.toString() ?? 'Pending'} />
+          <DataRow label="Block Number" value={kycCase.anchorBlock?.toString() ?? '—'} />
           <DataRow label="Network" value={CHAIN_NAME} />
-          <DataRow label="Timestamp" value={new Date(record.timestamp).toLocaleString()} />
+          <Text style={[styles.anchorNote, { color: colors.textSecondary }]}>
+            The digest covers both image hashes, the three axes, the confidence and
+            the lane scores — the verdict, not the images.
+          </Text>
         </Section>
 
-        {/* AI Analysis */}
-        <Section id="ai" icon="eye" title="AI Analysis" delay={600}>
-          <ScoreBar
-            label="Deepfake Detection"
-            score={record.aiDeepfakeScore}
-            color={record.aiDeepfakeScore > 0.3 ? Colors.danger : Colors.success}
+        {/* Image hashes */}
+        <Section id="crypto" icon="finger-print" title="Image hashes" delay={700}>
+          <DataRow
+            label="ID document (SHA-256)"
+            value={kycCase.idImageSha256 || '—'}
+            onCopy={
+              kycCase.idImageSha256
+                ? () => copyText(kycCase.idImageSha256, 'ID hash')
+                : undefined
+            }
           />
-          <ScoreBar
-            label="AI Generated"
-            score={record.aiGeneratedScore}
-            color={record.aiGeneratedScore > 0.3 ? Colors.danger : Colors.success}
+          <DataRow
+            label="Selfie (SHA-256)"
+            value={kycCase.selfieSha256 || '—'}
+            onCopy={
+              kycCase.selfieSha256 ? () => copyText(kycCase.selfieSha256, 'Selfie hash') : undefined
+            }
           />
-          <View style={[styles.verdictRow, { marginTop: 8 }]}>
-            <Ionicons
-              name={record.aiDeepfakeScore < 0.3 && record.aiGeneratedScore < 0.3 ? 'checkmark-circle' : 'warning'}
-              size={18}
-              color={record.aiDeepfakeScore < 0.3 && record.aiGeneratedScore < 0.3 ? Colors.success : Colors.danger}
+          {kycCase.idImageUrl && (
+            <DataRow
+              label="ID image URL"
+              value={kycCase.idImageUrl}
+              onCopy={() => copyText(kycCase.idImageUrl!, 'ID image URL')}
             />
-            <Text
-              style={[
-                styles.verdictText,
-                {
-                  color: record.aiDeepfakeScore < 0.3 && record.aiGeneratedScore < 0.3 ? Colors.success : Colors.danger,
-                },
-              ]}
-            >
-              {record.aiDeepfakeScore < 0.3 && record.aiGeneratedScore < 0.3
-                ? 'Media appears genuine'
-                : 'Potential manipulation detected'}
-            </Text>
-          </View>
+          )}
+          {kycCase.selfieUrl && (
+            <DataRow
+              label="Selfie URL"
+              value={kycCase.selfieUrl}
+              onCopy={() => copyText(kycCase.selfieUrl!, 'Selfie URL')}
+            />
+          )}
         </Section>
 
-        {/* Originality */}
-        <Section id="originality" icon="search" title="Originality Check" delay={700}>
-          <DataRow label="Plagiarism Score" value={`${record.plagiarismScore}%`} />
-          <View style={styles.verdictRow}>
-            <Ionicons
-              name={record.plagiarismScore < 20 ? 'checkmark-circle' : 'warning'}
-              size={18}
-              color={record.plagiarismScore < 20 ? Colors.success : Colors.warning}
-            />
-            <Text
-              style={[
-                styles.verdictText,
-                { color: record.plagiarismScore < 20 ? Colors.success : Colors.warning },
-              ]}
-            >
-              {record.plagiarismScore < 20 ? 'Content appears original' : 'Similar content found'}
-            </Text>
-          </View>
+        {/* Device Ed25519 proof over the image-pair digest */}
+        <Section id="signature" icon="key" title="Device signature" delay={750}>
+          <DataRow
+            label="Signature (Ed25519)"
+            value={kycCase.signature || 'Not signed'}
+            onCopy={
+              kycCase.signature ? () => copyText(kycCase.signature, 'Signature') : undefined
+            }
+          />
+          <DataRow
+            label="Device public key"
+            value={kycCase.publicKey || 'No device key'}
+            onCopy={
+              kycCase.publicKey ? () => copyText(kycCase.publicKey, 'Public key') : undefined
+            }
+          />
+          <Text style={[styles.anchorNote, { color: colors.textSecondary }]}>
+            Signed over the two image hashes concatenated, with this device's key.
+            The same signature is submitted alongside the verdict digest when the
+            case is anchored.
+          </Text>
         </Section>
 
         {/* Device Info */}
-        <Section id="device" icon="phone-portrait" title="Device Info" delay={800}>
-          <DataRow label="Platform" value={record.deviceInfo ?? 'Unknown'} />
-          <DataRow label="Capture Time" value={new Date(record.createdAt).toLocaleString()} />
-          <DataRow label="File Type" value={record.fileType.toUpperCase()} />
-          <DataRow label="File Size" value={formatBytes(record.fileSize)} />
-          {record.imageUrl && (
-            <DataRow
-              label="Public Image URL"
-              value={record.imageUrl}
-              onCopy={() => copyText(record.imageUrl!, 'Image URL')}
-            />
-          )}
+        <Section id="device" icon="phone-portrait" title="Case metadata" delay={800}>
+          <DataRow label="Case ID" value={kycCase.id} />
+          <DataRow label="Platform" value={kycCase.deviceInfo || 'Unknown'} />
+          <DataRow label="Created" value={new Date(kycCase.createdAt).toLocaleString()} />
+          <DataRow label="Updated" value={new Date(kycCase.updatedAt).toLocaleString()} />
+          <DataRow
+            label="Attested capture"
+            value={
+              kycCase.idImageAttested && kycCase.selfieAttested
+                ? 'Both images from this device camera'
+                : 'ID document was imported'
+            }
+          />
         </Section>
 
         <View style={{ height: 30 }} />
@@ -353,26 +378,26 @@ export default function VerifyDetailScreen() {
             ]}
           >
             <View style={styles.txModalHeader}>
-              <LinearGradient
-                colors={['#3B82F6', '#8B5CF6']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.txModalIconBg}
+              <View
+                style={[
+                  styles.txModalIconBg,
+                  { backgroundColor: verdictColor(kycCase.decision) },
+                ]}
               >
                 <Ionicons name="cube" size={28} color="#FFFFFF" />
-              </LinearGradient>
-              <Text style={[styles.txModalTitle, { color: colors.text }]}>On-Chain Proof</Text>
+              </View>
+              <Text style={[styles.txModalTitle, { color: colors.text }]}>Anchored Verdict</Text>
               <Text style={[styles.txModalSubtitle, { color: colors.textSecondary }]}>
-                Anchored on {CHAIN_NAME}
+                Recorded on {CHAIN_NAME}
               </Text>
             </View>
 
             <ScrollView style={styles.txModalBody} showsVerticalScrollIndicator={false}>
               <View style={[styles.txDetailRow, { borderColor: isDark ? Colors.dark.border : Colors.light.border }]}>
                 <Text style={[styles.txDetailLabel, { color: colors.textSecondary }]}>Transaction Hash</Text>
-                <Pressable onPress={() => copyText(record.blockchainTx!, 'Tx Hash')} style={styles.txCopyRow}>
+                <Pressable onPress={() => copyText(kycCase.anchorTx!, 'Tx Hash')} style={styles.txCopyRow}>
                   <Text style={[styles.txDetailValue, { color: colors.text }]} numberOfLines={2}>
-                    {record.blockchainTx}
+                    {kycCase.anchorTx}
                   </Text>
                   <Ionicons name="copy-outline" size={16} color={Colors.primary[500]} />
                 </Pressable>
@@ -381,7 +406,7 @@ export default function VerifyDetailScreen() {
               <View style={[styles.txDetailRow, { borderColor: isDark ? Colors.dark.border : Colors.light.border }]}>
                 <Text style={[styles.txDetailLabel, { color: colors.textSecondary }]}>Block Number</Text>
                 <Text style={[styles.txDetailValue, { color: colors.text }]}>
-                  {record.blockNumber?.toString() ?? 'Pending'}
+                  {kycCase.anchorBlock?.toString() ?? 'Pending'}
                 </Text>
               </View>
 
@@ -408,30 +433,30 @@ export default function VerifyDetailScreen() {
                 </Pressable>
               </View>
 
-              <View style={[styles.txDetailRow, { borderColor: isDark ? Colors.dark.border : Colors.light.border }]}>
-                <Text style={[styles.txDetailLabel, { color: colors.textSecondary }]}>File Hash (Anchored)</Text>
-                <Pressable onPress={() => copyText(record.fileHash, 'File Hash')} style={styles.txCopyRow}>
+              <View style={[styles.txDetailRow, { borderColor: 'transparent' }]}>
+                <Text style={[styles.txDetailLabel, { color: colors.textSecondary }]}>
+                  Verdict digest (anchored)
+                </Text>
+                <Pressable
+                  onPress={() => copyText(kycCase.anchorPayloadHash ?? '', 'Verdict digest')}
+                  style={styles.txCopyRow}
+                >
                   <Text style={[styles.txDetailValue, { color: colors.text }]} numberOfLines={1}>
-                    {record.fileHash}
+                    {kycCase.anchorPayloadHash ?? '—'}
                   </Text>
                   <Ionicons name="copy-outline" size={16} color={Colors.primary[500]} />
                 </Pressable>
-              </View>
-
-              <View style={[styles.txDetailRow, { borderColor: 'transparent' }]}>
-                <Text style={[styles.txDetailLabel, { color: colors.textSecondary }]}>Timestamp</Text>
-                <Text style={[styles.txDetailValue, { color: colors.text }]}>
-                  {new Date(record.timestamp).toLocaleString()}
-                </Text>
               </View>
             </ScrollView>
 
             <View style={styles.txModalActions}>
               <Pressable
                 onPress={() => {
-                  const explorerUrl = `${BLOCK_EXPLORER}/tx/${record.blockchainTx}`;
-                  Linking.openURL(explorerUrl).catch(() => {
-                    Alert.alert('Explorer Error', 'Could not open the Sepolia block explorer. Please try again later.');
+                  Linking.openURL(`${BLOCK_EXPLORER}/tx/${kycCase.anchorTx}`).catch(() => {
+                    Alert.alert(
+                      'Explorer Error',
+                      'Could not open the Sepolia block explorer. Please try again later.'
+                    );
                   });
                 }}
                 style={[styles.txModalBtn, { backgroundColor: isDark ? Colors.dark.elevated : Colors.light.elevated }]}
@@ -454,44 +479,33 @@ export default function VerifyDetailScreen() {
   );
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-}
-
 const styles = StyleSheet.create({
   container: { flex: 1 },
   center: { justifyContent: 'center', alignItems: 'center' },
   scrollContent: { paddingBottom: 20 },
   heroContainer: {
     width: width,
-    height: width * 0.75,
+    height: width * 0.62,
+    flexDirection: 'row',
+    gap: 2,
     position: 'relative',
     backgroundColor: '#000',
   },
+  heroPane: { flex: 1, position: 'relative' },
   heroImage: { width: '100%', height: '100%' },
-  watermarkOverlay: {
+  heroCaption: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(0,0,0,0.55)',
   },
-  watermarkGradient: {
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    paddingTop: 30,
-  },
-  watermarkBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  watermarkText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
-  watermarkScore: { color: 'rgba(255,255,255,0.8)', fontSize: 12, fontWeight: '600', marginLeft: 4 },
-  watermarkHash: { color: 'rgba(255,255,255,0.5)', fontSize: 10, fontWeight: '500', marginTop: 2, fontFamily: 'monospace' },
   statusPill: {
     position: 'absolute',
     top: 12,
@@ -499,12 +513,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
   },
   statusText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
-  scoreContainer: { alignItems: 'center', paddingVertical: 24 },
+  axesContainer: { paddingHorizontal: 16, paddingVertical: 20, gap: 12 },
+  reviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  reviewLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
   actionsRow: {
     flexDirection: 'row',
     gap: 12,
@@ -551,14 +574,7 @@ const styles = StyleSheet.create({
   dataValueRow: { flexDirection: 'row', alignItems: 'center' },
   dataValue: { fontSize: 13, fontWeight: '600', flex: 1 },
   copyBtn: { padding: 4, marginLeft: 6 },
-  scoreBarContainer: { marginBottom: 10 },
-  scoreBarHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
-  scoreBarLabel: { fontSize: 12 },
-  scoreBarValue: { fontSize: 12, fontWeight: '700' },
-  scoreBarTrack: { height: 6, borderRadius: 3 },
-  scoreBarFill: { height: 6, borderRadius: 3 },
-  verdictRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  verdictText: { fontSize: 13, fontWeight: '600' },
+  anchorNote: { fontSize: 11, lineHeight: 16, opacity: 0.75 },
   // Tx Modal styles
   txModalOverlay: {
     flex: 1,

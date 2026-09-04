@@ -16,6 +16,9 @@ DROP TABLE IF EXISTS kyc_cases;
 CREATE TABLE IF NOT EXISTS kyc_cases (
   id TEXT PRIMARY KEY,
   created_at TIMESTAMPTZ DEFAULT NOW(),
+  -- Bumped whenever the row changes, including a reviewer's approve/reject.
+  -- Without it the audit trail cannot say when a decision was altered.
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
 
   -- Uploaded ID document
   id_image_sha256 TEXT,
@@ -27,8 +30,10 @@ CREATE TABLE IF NOT EXISTS kyc_cases (
   selfie_url TEXT,
   selfie_attested BOOLEAN DEFAULT FALSE,
 
-  -- Per-lane detector output, keyed by lane:
-  -- {"B": {"score":0.82,"confidence":0.7,"reasons":["..."],"box":[x,y,w,h]}, "C": {...}}
+  -- Per-lane detector output: a JSON ARRAY of lane objects (see LaneOut in
+  -- lib/forensics.ts), both images' lanes concatenated:
+  -- [{"lane":"B","name":"...","score":0.82,"confidence":0.7,"usable":true,
+  --   "reasons":["..."],"box":[x,y,w,h]}, {...}]
   lanes JSONB,
 
   -- Verdicts
@@ -36,14 +41,23 @@ CREATE TABLE IF NOT EXISTS kyc_cases (
   identity     TEXT CHECK (identity     IN ('MATCH', 'MISMATCH', 'INDETERMINATE')),
   decision     TEXT CHECK (decision     IN ('ACCEPT', 'REJECT', 'REVIEW')),
   confidence   REAL,
+  -- False until a held-out calibration set exists; never render the
+  -- confidence as a probability while it is false.
+  confidence_is_calibrated BOOLEAN DEFAULT FALSE,
 
-  -- Ordered explanation list: [{"lane":"B","text":"...","severity":"high"}]
+  -- Ordered explanation list. severity is one of 'info' | 'warn' | 'critical'
+  -- (see VerdictReason in lib/forensics.ts):
+  -- [{"lane":"B","text":"...","severity":"critical"}]
   reasons JSONB,
 
   -- On-chain anchor
   anchor_tx TEXT,
   anchor_block BIGINT,
   anchor_payload_hash TEXT,
+
+  -- Device Ed25519 proof over the image-pair digest
+  signature TEXT,
+  public_key TEXT,
 
   -- Manual review outcome (NULL = never sent to review)
   review_status TEXT CHECK (review_status IN ('pending', 'approved', 'rejected')),

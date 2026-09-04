@@ -1,160 +1,202 @@
 import * as SQLite from 'expo-sqlite';
-import type { MediaRecord } from './types';
+import type { KYCCase, LaneOut, VerdictReason } from './types';
+
+// New filename rather than a migration: the old media_records rows carried
+// trust scores that no longer exist, and there is no production data. Bumped
+// to -v2 again when signature/publicKey/confidenceIsCalibrated were added.
+const DB_NAME = 'verilens-kyc-v2.db';
 
 let db: SQLite.SQLiteDatabase | null = null;
 
 export async function getDb(): Promise<SQLite.SQLiteDatabase> {
   if (!db) {
-    db = await SQLite.openDatabaseAsync('verilens.db');
-    await initSchema();
+    db = await SQLite.openDatabaseAsync(DB_NAME);
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS kyc_cases (
+        id TEXT PRIMARY KEY,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL,
+        idImageUri TEXT NOT NULL,
+        idImageSha256 TEXT,
+        idImageAttested INTEGER DEFAULT 0,
+        idImageUrl TEXT,
+        selfieUri TEXT NOT NULL,
+        selfieSha256 TEXT,
+        selfieAttested INTEGER DEFAULT 0,
+        selfieUrl TEXT,
+        lanes TEXT,
+        authenticity TEXT,
+        identity TEXT,
+        decision TEXT,
+        confidence REAL,
+        confidenceIsCalibrated INTEGER DEFAULT 0,
+        reasons TEXT,
+        anchorTx TEXT,
+        anchorBlock INTEGER,
+        anchorPayloadHash TEXT,
+        signature TEXT,
+        publicKey TEXT,
+        reviewStatus TEXT,
+        status TEXT DEFAULT 'pending',
+        deviceInfo TEXT
+      );
+    `);
   }
   return db;
 }
 
-async function initSchema() {
-  if (!db) return;
-  await db.execAsync(`
-    CREATE TABLE IF NOT EXISTS media_records (
-      id TEXT PRIMARY KEY,
-      fileUri TEXT NOT NULL,
-      fileName TEXT NOT NULL,
-      fileType TEXT NOT NULL DEFAULT 'image',
-      fileSize INTEGER DEFAULT 0,
-      fileHash TEXT,
-      signature TEXT,
-      publicKey TEXT,
-      timestamp INTEGER,
-      blockchainTx TEXT,
-      blockNumber INTEGER,
-      aiDeepfakeScore REAL DEFAULT 0,
-      aiGeneratedScore REAL DEFAULT 0,
-      plagiarismScore REAL DEFAULT 0,
-      trustScore REAL DEFAULT 0,
-      trustGrade TEXT DEFAULT 'F',
-      watermarkedUri TEXT,
-      imageUrl TEXT,
-      status TEXT DEFAULT 'pending',
-      deviceInfo TEXT,
-      location TEXT,
-      createdAt TEXT NOT NULL,
-      updatedAt TEXT NOT NULL
-    );
-  `);
+// ──────────────── Row ⇄ KYCCase ────────────────
 
-  // Migration: add imageUrl column if missing (for existing databases)
+/** JSON.parse that yields null instead of throwing on a malformed row. */
+function parseJson<T>(raw: unknown): T[] | null {
+  if (typeof raw !== 'string' || raw.length === 0) return null;
   try {
-    await db.execAsync(`ALTER TABLE media_records ADD COLUMN imageUrl TEXT;`);
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as T[]) : null;
   } catch {
-    // Column already exists — ignore
+    return null;
   }
 }
 
-export async function insertMediaRecord(record: MediaRecord): Promise<void> {
+function rowToCase(row: any): KYCCase {
+  return {
+    ...row,
+    idImageAttested: !!row.idImageAttested,
+    selfieAttested: !!row.selfieAttested,
+    confidenceIsCalibrated: !!row.confidenceIsCalibrated,
+    lanes: parseJson<LaneOut>(row.lanes),
+    reasons: parseJson<VerdictReason>(row.reasons),
+  } as KYCCase;
+}
+
+const COLUMNS = [
+  'id',
+  'createdAt',
+  'updatedAt',
+  'idImageUri',
+  'idImageSha256',
+  'idImageAttested',
+  'idImageUrl',
+  'selfieUri',
+  'selfieSha256',
+  'selfieAttested',
+  'selfieUrl',
+  'lanes',
+  'authenticity',
+  'identity',
+  'decision',
+  'confidence',
+  'confidenceIsCalibrated',
+  'reasons',
+  'anchorTx',
+  'anchorBlock',
+  'anchorPayloadHash',
+  'signature',
+  'publicKey',
+  'reviewStatus',
+  'status',
+  'deviceInfo',
+] as const;
+
+function toColumnValue(key: string, value: any): any {
+  if (key === 'lanes' || key === 'reasons') {
+    return value == null ? null : JSON.stringify(value);
+  }
+  if (typeof value === 'boolean') return value ? 1 : 0;
+  return value ?? null;
+}
+
+// ──────────────── Writes ────────────────
+
+export async function insertCase(kycCase: KYCCase): Promise<void> {
   const database = await getDb();
   await database.runAsync(
-    `INSERT OR REPLACE INTO media_records 
-     (id, fileUri, fileName, fileType, fileSize, fileHash, signature, publicKey,
-      timestamp, blockchainTx, blockNumber, aiDeepfakeScore, aiGeneratedScore,
-      plagiarismScore, trustScore, trustGrade, watermarkedUri, imageUrl, status,
-      deviceInfo, location, createdAt, updatedAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT OR REPLACE INTO kyc_cases (${COLUMNS.join(', ')})
+     VALUES (${COLUMNS.map(() => '?').join(', ')})`,
+    COLUMNS.map((c) => toColumnValue(c, (kycCase as any)[c]))
+  );
+}
+
+export async function updateCase(
+  id: string,
+  updates: Partial<KYCCase>
+): Promise<void> {
+  const database = await getDb();
+  // id is the WHERE key; updatedAt is always stamped below.
+  const entries = Object.entries(updates).filter(
+    ([key]) => key !== 'id' && key !== 'updatedAt'
+  );
+  if (entries.length === 0) return;
+
+  await database.runAsync(
+    `UPDATE kyc_cases SET ${entries
+      .map(([key]) => `${key} = ?`)
+      .join(', ')}, updatedAt = ? WHERE id = ?`,
     [
-      record.id,
-      record.fileUri,
-      record.fileName,
-      record.fileType,
-      record.fileSize,
-      record.fileHash,
-      record.signature,
-      record.publicKey,
-      record.timestamp,
-      record.blockchainTx,
-      record.blockNumber,
-      record.aiDeepfakeScore,
-      record.aiGeneratedScore,
-      record.plagiarismScore,
-      record.trustScore,
-      record.trustGrade,
-      record.watermarkedUri,
-      record.imageUrl,
-      record.status,
-      record.deviceInfo,
-      record.location,
-      record.createdAt,
-      record.updatedAt,
+      ...entries.map(([key, value]) => toColumnValue(key, value)),
+      new Date().toISOString(),
+      id,
     ]
   );
 }
 
-export async function updateMediaRecord(
-  id: string,
-  updates: Partial<MediaRecord>
-): Promise<void> {
+export async function deleteCase(id: string): Promise<void> {
   const database = await getDb();
-  const fields: string[] = [];
-  const values: any[] = [];
-
-  Object.entries(updates).forEach(([key, value]) => {
-    if (key !== 'id') {
-      // Convert camelCase to the DB column name (same in our case)
-      fields.push(`${key} = ?`);
-      values.push(value);
-    }
-  });
-
-  if (fields.length === 0) return;
-  values.push(id);
-
-  await database.runAsync(
-    `UPDATE media_records SET ${fields.join(', ')}, updatedAt = datetime('now') WHERE id = ?`,
-    values
-  );
+  await database.runAsync('DELETE FROM kyc_cases WHERE id = ?', [id]);
 }
 
-export async function getAllRecords(): Promise<MediaRecord[]> {
+// ──────────────── Reads ────────────────
+
+export async function getAllCases(): Promise<KYCCase[]> {
   const database = await getDb();
-  const rows = await database.getAllAsync<MediaRecord>(
-    'SELECT * FROM media_records ORDER BY createdAt DESC'
+  const rows = await database.getAllAsync<any>(
+    'SELECT * FROM kyc_cases ORDER BY createdAt DESC'
   );
-  return rows;
+  return rows.map(rowToCase);
 }
 
-export async function getRecordById(id: string): Promise<MediaRecord | null> {
+export async function getCaseById(id: string): Promise<KYCCase | null> {
   const database = await getDb();
-  const row = await database.getFirstAsync<MediaRecord>(
-    'SELECT * FROM media_records WHERE id = ?',
+  const row = await database.getFirstAsync<any>(
+    'SELECT * FROM kyc_cases WHERE id = ?',
     [id]
   );
-  return row ?? null;
+  return row ? rowToCase(row) : null;
 }
 
-export async function getRecordsByStatus(status: string): Promise<MediaRecord[]> {
+export async function getCasesByStatus(status: string): Promise<KYCCase[]> {
   const database = await getDb();
-  return database.getAllAsync<MediaRecord>(
-    'SELECT * FROM media_records WHERE status = ? ORDER BY createdAt DESC',
+  const rows = await database.getAllAsync<any>(
+    'SELECT * FROM kyc_cases WHERE status = ? ORDER BY createdAt DESC',
     [status]
   );
+  return rows.map(rowToCase);
+}
+
+/** The manual-review queue: anything the pipeline could not decide. */
+export async function getCasesForReview(): Promise<KYCCase[]> {
+  const database = await getDb();
+  const rows = await database.getAllAsync<any>(
+    `SELECT * FROM kyc_cases
+     WHERE decision = 'REVIEW' OR reviewStatus = 'pending'
+     ORDER BY createdAt DESC`
+  );
+  return rows.map(rowToCase);
 }
 
 export async function getStats() {
   const database = await getDb();
-  const total = await database.getFirstAsync<{ count: number }>(
-    'SELECT COUNT(*) as count FROM media_records'
-  );
-  const verified = await database.getFirstAsync<{ count: number }>(
-    "SELECT COUNT(*) as count FROM media_records WHERE status = 'verified'"
-  );
-  const onChain = await database.getFirstAsync<{ count: number }>(
-    'SELECT COUNT(*) as count FROM media_records WHERE blockchainTx IS NOT NULL'
-  );
-  return {
-    total: total?.count ?? 0,
-    verified: verified?.count ?? 0,
-    onChain: onChain?.count ?? 0,
-  };
-}
+  const count = async (where: string) =>
+    (
+      await database.getFirstAsync<{ count: number }>(
+        `SELECT COUNT(*) as count FROM kyc_cases ${where}`
+      )
+    )?.count ?? 0;
 
-export async function deleteRecord(id: string): Promise<void> {
-  const database = await getDb();
-  await database.runAsync('DELETE FROM media_records WHERE id = ?', [id]);
+  return {
+    total: await count(''),
+    accepted: await count("WHERE decision = 'ACCEPT'"),
+    review: await count("WHERE decision = 'REVIEW' OR reviewStatus = 'pending'"),
+    onChain: await count('WHERE anchorTx IS NOT NULL'),
+  };
 }

@@ -41,24 +41,6 @@ export const Colors = {
   },
 };
 
-export const GRADES = {
-  S: { label: 'S', color: '#3B82F6', bg: '#EFF6FF', darkBg: '#1E3A8A' },
-  A: { label: 'A', color: '#10B981', bg: '#ECFDF5', darkBg: '#064E3B' },
-  B: { label: 'B', color: '#F59E0B', bg: '#FFFBEB', darkBg: '#78350F' },
-  C: { label: 'C', color: '#F97316', bg: '#FFF7ED', darkBg: '#7C2D12' },
-  F: { label: 'F', color: '#EF4444', bg: '#FEF2F2', darkBg: '#7F1D1D' },
-} as const;
-
-export type GradeKey = keyof typeof GRADES;
-
-export function getGrade(score: number): GradeKey {
-  if (score >= 95) return 'S';
-  if (score >= 80) return 'A';
-  if (score >= 60) return 'B';
-  if (score >= 40) return 'C';
-  return 'F';
-}
-
 // Backend API URL (Render free tier)
 // MOVED TO constants/config.ts — import from there instead
 

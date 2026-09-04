@@ -17,7 +17,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Colors } from '@/constants/Colors';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { useAppStore } from '@/stores/media-store';
-import { MediaListCard } from '@/components/MediaCard';
+import { CaseListCard } from '@/components/CaseCard';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -25,7 +25,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { isDark, colors } = useThemeColors();
-  const { records, stats, publicKey, loadRecords, refreshStats } = useAppStore();
+  const { cases, stats, publicKey, loadCases, refreshStats } = useAppStore();
   const [refreshing, setRefreshing] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(true);
 
@@ -33,7 +33,7 @@ export default function HomeScreen() {
     useCallback(() => {
       let active = true;
       (async () => {
-        await Promise.all([loadRecords(), refreshStats()]);
+        await Promise.all([loadCases(), refreshStats()]);
         if (active) setIsLoading(false);
       })();
       return () => { active = false; };
@@ -42,11 +42,11 @@ export default function HomeScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([loadRecords(), refreshStats()]);
+    await Promise.all([loadCases(), refreshStats()]);
     setRefreshing(false);
   };
 
-  const recent = records.slice(0, 5);
+  const recent = cases.slice(0, 5);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -63,7 +63,7 @@ export default function HomeScreen() {
             <Text style={[styles.greeting, { color: colors.textSecondary }]}>Welcome to</Text>
             <Text style={[styles.appName, { color: colors.text }]}>VeriLens</Text>
             <Text style={[styles.tagline, { color: colors.textSecondary }]}>
-              Proof of Capture
+              KYC Image Forensics
             </Text>
           </View>
           <Pressable
@@ -81,9 +81,9 @@ export default function HomeScreen() {
         {/* Stats Cards */}
         <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.statsRow}>
           {[
-            { n: stats.total, label: 'Total', colors: isDark ? ['#1E3A8A', '#1D4ED8'] : ['#3B82F6', '#2563EB'], icon: 'camera' },
-            { n: stats.verified, label: 'Verified', colors: isDark ? ['#064E3B', '#047857'] : ['#10B981', '#059669'], icon: 'shield-checkmark' },
-            { n: stats.onChain, label: 'On-Chain', colors: isDark ? ['#4C1D95', '#6D28D9'] : ['#8B5CF6', '#7C3AED'], icon: 'link' },
+            { n: stats.total, label: 'Cases', colors: isDark ? ['#1E3A8A', '#1D4ED8'] : ['#3B82F6', '#2563EB'], icon: 'documents' },
+            { n: stats.accepted, label: 'Accepted', colors: isDark ? ['#064E3B', '#047857'] : ['#10B981', '#059669'], icon: 'shield-checkmark' },
+            { n: stats.review, label: 'In Review', colors: isDark ? ['#78350F', '#B45309'] : ['#F59E0B', '#D97706'], icon: 'alert-circle' },
           ].map((stat, i) => (
             <LinearGradient
               key={stat.label}
@@ -115,8 +115,8 @@ export default function HomeScreen() {
                 <Ionicons name="camera" size={22} color="#FFFFFF" />
               </View>
               <View style={styles.captureTextContainer}>
-                <Text style={styles.captureButtonText}>Capture & Verify</Text>
-                <Text style={styles.captureSubtext}>Take a photo or import from gallery</Text>
+                <Text style={styles.captureButtonText}>New KYC Check</Text>
+                <Text style={styles.captureSubtext}>ID document, then a live selfie</Text>
               </View>
               <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.6)" />
             </LinearGradient>
@@ -138,8 +138,8 @@ export default function HomeScreen() {
                 <Ionicons name="shield-checkmark" size={22} color="#FFFFFF" />
               </View>
               <View style={styles.captureTextContainer}>
-                <Text style={styles.captureButtonText}>Verify a Proof</Text>
-                <Text style={styles.captureSubtext}>Check image authenticity on-chain</Text>
+                <Text style={styles.captureButtonText}>Verify a Verdict</Text>
+                <Text style={styles.captureSubtext}>Check an anchored case on-chain</Text>
               </View>
               <Ionicons name="chevron-forward" size={20} color="rgba(255,255,255,0.6)" />
             </LinearGradient>
@@ -149,8 +149,8 @@ export default function HomeScreen() {
         {/* Recent Activity */}
         <Animated.View entering={FadeInDown.delay(400).springify()} style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Recent Activity</Text>
-            {records.length > 5 && (
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Recent Cases</Text>
+            {cases.length > 5 && (
               <Pressable onPress={() => router.push('/(tabs)/gallery')}>
                 <Text style={[styles.seeAll, { color: Colors.primary[500] }]}>See All</Text>
               </Pressable>
@@ -165,15 +165,15 @@ export default function HomeScreen() {
               <View style={[styles.emptyIconCircle, { backgroundColor: isDark ? 'rgba(59,130,246,0.1)' : 'rgba(59,130,246,0.06)' }]}>
                 <Ionicons name="images-outline" size={32} color={Colors.primary[400]} />
               </View>
-              <Text style={[styles.emptyText, { color: colors.text }]}>No media verified yet</Text>
+              <Text style={[styles.emptyText, { color: colors.text }]}>No KYC cases yet</Text>
               <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>
-                Capture or import a photo to get started
+                Run your first check to get started
               </Text>
             </View>
           ) : (
-            recent.map((record, index) => (
-              <Animated.View key={record.id} entering={FadeInRight.delay(500 + index * 80).springify()}>
-                <MediaListCard record={record} />
+            recent.map((kycCase, index) => (
+              <Animated.View key={kycCase.id} entering={FadeInRight.delay(500 + index * 80).springify()}>
+                <CaseListCard kycCase={kycCase} />
               </Animated.View>
             ))
           )}

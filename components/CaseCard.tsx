@@ -3,10 +3,10 @@ import { View, Image, Text, Pressable, StyleSheet, Dimensions } from 'react-nati
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { TrustBadge } from './TrustBadge';
+import { VerdictPill, formatConfidence, verdictColor } from './Verdict';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { Colors } from '@/constants/Colors';
-import type { MediaRecord } from '@/lib/types';
+import type { KYCCase } from '@/lib/types';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CARD_PADDING = 20;
@@ -14,24 +14,24 @@ const GRID_GAP = 12;
 const COLUMNS = 2;
 const CARD_WIDTH = (SCREEN_WIDTH - CARD_PADDING * 2 - GRID_GAP * (COLUMNS - 1)) / COLUMNS;
 
-interface MediaCardProps {
-  record: MediaRecord;
+interface CaseCardProps {
+  kycCase: KYCCase;
 }
 
-export function MediaCard({ record }: MediaCardProps) {
+const statusColor = (status: KYCCase['status']) =>
+  status === 'complete'
+    ? Colors.success
+    : status === 'failed'
+    ? Colors.danger
+    : Colors.warning;
+
+export function CaseCard({ kycCase }: CaseCardProps) {
   const router = useRouter();
   const { isDark, colors } = useThemeColors();
 
-  const statusColor =
-    record.status === 'verified'
-      ? Colors.success
-      : record.status === 'failed'
-      ? Colors.danger
-      : Colors.warning;
-
   return (
     <Pressable
-      onPress={() => router.push(`/verify/${record.id}` as any)}
+      onPress={() => router.push(`/verify/${kycCase.id}` as any)}
       style={({ pressed }) => [
         styles.card,
         {
@@ -43,37 +43,38 @@ export function MediaCard({ record }: MediaCardProps) {
       ]}
     >
       <View style={styles.imageContainer}>
-        <Image
-          source={{ uri: record.fileUri }}
-          style={styles.image}
-          resizeMode="cover"
-        />
-        {/* Trust badge overlay */}
+        {/* ID document behind, selfie inset — a case is always two images */}
+        <Image source={{ uri: kycCase.idImageUri }} style={styles.image} resizeMode="cover" />
+        <Image source={{ uri: kycCase.selfieUri }} style={styles.selfieInset} resizeMode="cover" />
+
         <View style={styles.badgeOverlay}>
-          <TrustBadge score={record.trustScore} size="sm" />
+          <VerdictPill value={kycCase.decision} size="sm" />
         </View>
-        {/* Watermark overlay */}
-        {record.status === 'verified' && (
+
+        {kycCase.anchorTx && (
           <LinearGradient
             colors={['transparent', 'rgba(0,0,0,0.6)']}
             style={styles.cardWatermark}
           >
             <View style={styles.cardWmBadge}>
-              <Ionicons name="shield-checkmark" size={10} color="#FFFFFF" />
-              <Text style={styles.cardWmText}>Verified</Text>
+              <Ionicons name="link" size={10} color="#FFFFFF" />
+              <Text style={styles.cardWmText}>Anchored</Text>
             </View>
           </LinearGradient>
         )}
-        {/* Status indicator */}
-        <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
+
+        <View style={[styles.statusDot, { backgroundColor: statusColor(kycCase.status) }]} />
       </View>
 
       <View style={styles.info}>
-        <Text style={[styles.scoreText, { color: colors.text }]} numberOfLines={1}>
-          Score: {record.trustScore}
+        <Text
+          style={[styles.axisText, { color: verdictColor(kycCase.authenticity) }]}
+          numberOfLines={1}
+        >
+          {kycCase.authenticity?.replace(/_/g, ' ') ?? 'NO VERDICT'}
         </Text>
         <Text style={[styles.dateText, { color: colors.textSecondary }]} numberOfLines={1}>
-          {new Date(record.createdAt).toLocaleDateString()}
+          {new Date(kycCase.createdAt).toLocaleDateString()}
         </Text>
       </View>
     </Pressable>
@@ -81,13 +82,14 @@ export function MediaCard({ record }: MediaCardProps) {
 }
 
 // Small horizontal list card
-export function MediaListCard({ record }: MediaCardProps) {
+export function CaseListCard({ kycCase }: CaseCardProps) {
   const router = useRouter();
   const { isDark, colors } = useThemeColors();
+  const topReason = kycCase.reasons?.[0]?.text;
 
   return (
     <Pressable
-      onPress={() => router.push(`/verify/${record.id}` as any)}
+      onPress={() => router.push(`/verify/${kycCase.id}` as any)}
       style={({ pressed }) => [
         styles.listCard,
         {
@@ -97,23 +99,28 @@ export function MediaListCard({ record }: MediaCardProps) {
         },
       ]}
     >
-      <Image
-        source={{ uri: record.fileUri }}
-        style={styles.listImage}
-        resizeMode="cover"
-      />
+      <Image source={{ uri: kycCase.selfieUri }} style={styles.listImage} resizeMode="cover" />
       <View style={styles.listInfo}>
         <View style={styles.listTop}>
-          <Text style={[styles.listTitle, { color: colors.text }]} numberOfLines={1}>
-            {record.fileType === 'image' ? '📷' : '🎥'} {record.fileName.substring(0, 20)}
+          <Text
+            style={[styles.listTitle, { color: verdictColor(kycCase.authenticity) }]}
+            numberOfLines={1}
+          >
+            {kycCase.authenticity?.replace(/_/g, ' ') ?? 'NO VERDICT'}
           </Text>
-          <TrustBadge score={record.trustScore} size="sm" />
+          <VerdictPill value={kycCase.decision} size="sm" />
         </View>
-        <Text style={[styles.listDetail, { color: colors.textSecondary }]}>
-          {record.status === 'verified' ? '✓ Verified' : record.status} • Score: {record.trustScore}
+        <Text style={[styles.listDetail, { color: colors.textSecondary }]} numberOfLines={1}>
+          {kycCase.identity ? `Identity ${kycCase.identity}` : 'Identity not assessed'} ·{' '}
+          {formatConfidence(kycCase.confidence, kycCase.confidenceIsCalibrated)}
         </Text>
+        {topReason ? (
+          <Text style={[styles.listReason, { color: colors.textSecondary }]} numberOfLines={1}>
+            {topReason}
+          </Text>
+        ) : null}
         <Text style={[styles.listDate, { color: colors.textSecondary }]}>
-          {new Date(record.createdAt).toLocaleString()}
+          {new Date(kycCase.createdAt).toLocaleString()}
         </Text>
       </View>
     </Pressable>
@@ -142,6 +149,17 @@ const styles = StyleSheet.create({
   image: {
     width: '100%',
     height: '100%',
+  },
+  selfieInset: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    width: 40,
+    height: 52,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.75)',
+    backgroundColor: '#000',
   },
   badgeOverlay: {
     position: 'absolute',
@@ -181,10 +199,10 @@ const styles = StyleSheet.create({
   info: {
     padding: 12,
   },
-  scoreText: {
-    fontSize: 13,
-    fontWeight: '800',
-    letterSpacing: -0.2,
+  axisText: {
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.2,
   },
   dateText: {
     fontSize: 11,
@@ -205,7 +223,7 @@ const styles = StyleSheet.create({
   },
   listImage: {
     width: 80,
-    height: 80,
+    height: 100,
     backgroundColor: '#000',
   },
   listInfo: {
@@ -219,20 +237,25 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   listTitle: {
-    fontSize: 14,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '900',
     flex: 1,
     marginRight: 8,
-    letterSpacing: -0.2,
+    letterSpacing: 0.2,
   },
   listDetail: {
     fontSize: 12,
     marginTop: 4,
     opacity: 0.8,
   },
+  listReason: {
+    fontSize: 11,
+    marginTop: 3,
+    opacity: 0.75,
+  },
   listDate: {
     fontSize: 11,
-    marginTop: 2,
+    marginTop: 3,
     opacity: 0.6,
   },
 });

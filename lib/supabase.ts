@@ -1,6 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@/constants/config';
-import type { MediaRecord } from './types';
+import type { KYCCase, LaneOut, VerdictReason } from './types';
 
 // ──────────────── Supabase Client ────────────────
 
@@ -12,6 +12,10 @@ function getSupabase(): SupabaseClient {
   }
   return supabase;
 }
+
+// Table and bucket names come from supabase-setup.sql — keep them in sync.
+const TABLE = 'kyc_cases';
+const BUCKET = 'kyc-media';
 
 // Check if Supabase is configured (not using placeholder values)
 export function isSupabaseConfigured(): boolean {
@@ -33,65 +37,76 @@ export function isSupabaseConfigured(): boolean {
 
 // ──────────────── Database Types ────────────────
 
-export interface SupabaseProof {
+/** One row of the kyc_cases table (see supabase-setup.sql). */
+export interface SupabaseCase {
   id: string;
-  file_hash: string;
-  signature: string;
-  public_key: string;
-  blockchain_tx: string | null;
-  block_number: number | null;
-  ai_deepfake_score: number;
-  ai_generated_score: number;
-  plagiarism_score: number;
-  trust_score: number;
-  trust_grade: string;
-  file_type: string;
-  file_name: string;
-  file_size: number;
-  image_url: string | null;
-  device_info: string | null;
-  status: string;
   created_at: string;
+  updated_at: string;
+  id_image_sha256: string;
+  id_image_url: string | null;
+  id_image_attested: boolean;
+  selfie_sha256: string;
+  selfie_url: string | null;
+  selfie_attested: boolean;
+  lanes: LaneOut[] | null;
+  authenticity: string | null;
+  identity: string | null;
+  decision: string | null;
+  confidence: number | null;
+  confidence_is_calibrated: boolean;
+  reasons: VerdictReason[] | null;
+  anchor_tx: string | null;
+  anchor_block: number | null;
+  anchor_payload_hash: string | null;
+  signature: string | null;
+  public_key: string | null;
+  review_status: string | null;
+  device_info: string | null;
 }
 
-// ──────────────── Insert Proof ────────────────
+// ──────────────── Insert Case ────────────────
 
-export async function uploadProofToSupabase(record: MediaRecord): Promise<boolean> {
+export async function uploadCaseToSupabase(kycCase: KYCCase): Promise<boolean> {
   if (!isSupabaseConfigured()) {
     console.log('[Supabase] Not configured, skipping cloud sync.');
     return false;
   }
 
   try {
-    const proof: SupabaseProof = {
-      id: record.id,
-      file_hash: record.fileHash,
-      signature: record.signature,
-      public_key: record.publicKey,
-      blockchain_tx: record.blockchainTx,
-      block_number: record.blockNumber,
-      ai_deepfake_score: record.aiDeepfakeScore,
-      ai_generated_score: record.aiGeneratedScore,
-      plagiarism_score: record.plagiarismScore,
-      trust_score: record.trustScore,
-      trust_grade: record.trustGrade,
-      file_type: record.fileType,
-      file_name: record.fileName,
-      file_size: record.fileSize,
-      image_url: record.imageUrl,
-      device_info: record.deviceInfo,
-      status: record.status,
-      created_at: record.createdAt,
+    const row: SupabaseCase = {
+      id: kycCase.id,
+      created_at: kycCase.createdAt,
+      updated_at: kycCase.updatedAt,
+      id_image_sha256: kycCase.idImageSha256,
+      id_image_url: kycCase.idImageUrl,
+      id_image_attested: kycCase.idImageAttested,
+      selfie_sha256: kycCase.selfieSha256,
+      selfie_url: kycCase.selfieUrl,
+      selfie_attested: kycCase.selfieAttested,
+      lanes: kycCase.lanes,
+      authenticity: kycCase.authenticity,
+      identity: kycCase.identity,
+      decision: kycCase.decision,
+      confidence: kycCase.confidence,
+      confidence_is_calibrated: kycCase.confidenceIsCalibrated,
+      reasons: kycCase.reasons,
+      anchor_tx: kycCase.anchorTx,
+      anchor_block: kycCase.anchorBlock,
+      anchor_payload_hash: kycCase.anchorPayloadHash,
+      signature: kycCase.signature,
+      public_key: kycCase.publicKey,
+      review_status: kycCase.reviewStatus,
+      device_info: kycCase.deviceInfo,
     };
 
-    const { error } = await getSupabase().from('proofs').insert(proof);
+    const { error } = await getSupabase().from(TABLE).insert(row);
 
     if (error) {
       console.warn('[Supabase] Insert error:', error.message);
       return false;
     }
 
-    console.log('[Supabase] Proof uploaded:', record.id);
+    console.log('[Supabase] Case uploaded:', kycCase.id);
     return true;
   } catch (err) {
     console.warn('[Supabase] Upload failed:', err);
@@ -99,62 +114,65 @@ export async function uploadProofToSupabase(record: MediaRecord): Promise<boolea
   }
 }
 
-// ──────────────── Verify Proof by Hash ────────────────
+// ──────────────── Look up a case by image hash ────────────────
 
-export async function verifyProofOnSupabase(
-  fileHash: string
-): Promise<SupabaseProof | null> {
+/** Either uploaded image can match — a verifier only holds one of them. */
+export async function verifyCaseByImageHash(
+  sha256: string
+): Promise<SupabaseCase | null> {
   if (!isSupabaseConfigured()) return null;
 
   try {
     const { data, error } = await getSupabase()
-      .from('proofs')
+      .from(TABLE)
       .select('*')
-      .eq('file_hash', fileHash)
-      .single();
+      .or(`id_image_sha256.eq.${sha256},selfie_sha256.eq.${sha256}`)
+      .limit(1)
+      .maybeSingle();
 
     if (error || !data) return null;
-    return data as SupabaseProof;
+    return data as SupabaseCase;
   } catch {
     return null;
   }
 }
 
-// ──────────────── Verify Proof by Blockchain TX Hash ────────────────
+// ──────────────── Look up a case by anchor tx hash ────────────────
 
-export async function verifyProofByTxHash(
+export async function verifyCaseByTxHash(
   txHash: string
-): Promise<SupabaseProof | null> {
+): Promise<SupabaseCase | null> {
   if (!isSupabaseConfigured()) return null;
 
   try {
     const { data, error } = await getSupabase()
-      .from('proofs')
+      .from(TABLE)
       .select('*')
-      .eq('blockchain_tx', txHash)
-      .single();
+      .eq('anchor_tx', txHash)
+      .limit(1)
+      .maybeSingle();
 
     if (error || !data) return null;
-    return data as SupabaseProof;
+    return data as SupabaseCase;
   } catch {
     return null;
   }
 }
 
-// ──────────────── Get All Proofs (Global Feed) ────────────────
+// ──────────────── Get recent cases ────────────────
 
-export async function getRecentProofs(limit = 20): Promise<SupabaseProof[]> {
+export async function getRecentCases(limit = 20): Promise<SupabaseCase[]> {
   if (!isSupabaseConfigured()) return [];
 
   try {
     const { data, error } = await getSupabase()
-      .from('proofs')
+      .from(TABLE)
       .select('*')
       .order('created_at', { ascending: false })
       .limit(limit);
 
     if (error || !data) return [];
-    return data as SupabaseProof[];
+    return data as SupabaseCase[];
   } catch {
     return [];
   }
@@ -163,41 +181,42 @@ export async function getRecentProofs(limit = 20): Promise<SupabaseProof[]> {
 // ──────────────── Get Stats from Supabase ────────────────
 
 export async function getCloudStats(): Promise<{
-  totalProofs: number;
-  totalVerified: number;
+  totalCases: number;
+  totalAccepted: number;
 } | null> {
   if (!isSupabaseConfigured()) return null;
 
   try {
-    const { count: totalProofs } = await getSupabase()
-      .from('proofs')
+    const { count: totalCases } = await getSupabase()
+      .from(TABLE)
       .select('*', { count: 'exact', head: true });
 
-    const { count: totalVerified } = await getSupabase()
-      .from('proofs')
+    const { count: totalAccepted } = await getSupabase()
+      .from(TABLE)
       .select('*', { count: 'exact', head: true })
-      .eq('status', 'verified');
+      .eq('decision', 'ACCEPT');
 
     return {
-      totalProofs: totalProofs ?? 0,
-      totalVerified: totalVerified ?? 0,
+      totalCases: totalCases ?? 0,
+      totalAccepted: totalAccepted ?? 0,
     };
   } catch {
     return null;
   }
 }
 
-// ──────────────── Upload Media Thumbnail to Storage ────────────────
+// ──────────────── Upload a case image to Storage ────────────────
 
-export async function uploadThumbnailToStorage(
-  recordId: string,
+export async function uploadCaseImageToStorage(
+  caseId: string,
+  kind: 'id' | 'selfie',
   base64Data: string,
   contentType = 'image/jpeg'
 ): Promise<string | null> {
   if (!isSupabaseConfigured()) return null;
 
   try {
-    const fileName = `thumbnails/${recordId}.jpg`;
+    const fileName = `${caseId}/${kind}.jpg`;
 
     // Convert base64 to Uint8Array
     const binaryString = atob(base64Data);
@@ -207,7 +226,7 @@ export async function uploadThumbnailToStorage(
     }
 
     const { error } = await getSupabase().storage
-      .from('media')
+      .from(BUCKET)
       .upload(fileName, bytes, { contentType, upsert: true });
 
     if (error) {
@@ -216,7 +235,7 @@ export async function uploadThumbnailToStorage(
     }
 
     const { data: urlData } = getSupabase().storage
-      .from('media')
+      .from(BUCKET)
       .getPublicUrl(fileName);
 
     return urlData.publicUrl;
@@ -225,55 +244,3 @@ export async function uploadThumbnailToStorage(
     return null;
   }
 }
-
-// ──────────────── SQL Schema for Supabase ────────────────
-/*
-Run this in the Supabase SQL Editor to create the proofs table:
-
-CREATE TABLE proofs (
-  id TEXT PRIMARY KEY,
-  file_hash TEXT NOT NULL,
-  signature TEXT NOT NULL,
-  public_key TEXT NOT NULL,
-  blockchain_tx TEXT,
-  block_number BIGINT,
-  ai_deepfake_score REAL DEFAULT 0,
-  ai_generated_score REAL DEFAULT 0,
-  plagiarism_score REAL DEFAULT 0,
-  trust_score INTEGER DEFAULT 0,
-  trust_grade TEXT DEFAULT 'F',
-  file_type TEXT NOT NULL,
-  file_name TEXT NOT NULL,
-  file_size BIGINT DEFAULT 0,
-  image_url TEXT,
-  device_info TEXT,
-  status TEXT DEFAULT 'pending',
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Enable Row Level Security
-ALTER TABLE proofs ENABLE ROW LEVEL SECURITY;
-
--- Allow anyone to read proofs (for verification)
-CREATE POLICY "Proofs are publicly readable" ON proofs
-  FOR SELECT USING (true);
-
--- Allow inserting proofs from anon key
-CREATE POLICY "Anyone can insert proofs" ON proofs
-  FOR INSERT WITH CHECK (true);
-
--- Create index on file_hash for fast lookups
-CREATE INDEX idx_proofs_file_hash ON proofs(file_hash);
-CREATE INDEX idx_proofs_status ON proofs(status);
-
--- Create storage bucket for media thumbnails
-INSERT INTO storage.buckets (id, name, public)
-VALUES ('media', 'media', true);
-
--- Allow public access to media bucket
-CREATE POLICY "Public media access" ON storage.objects
-  FOR SELECT USING (bucket_id = 'media');
-
-CREATE POLICY "Anyone can upload media" ON storage.objects
-  FOR INSERT WITH CHECK (bucket_id = 'media');
-*/

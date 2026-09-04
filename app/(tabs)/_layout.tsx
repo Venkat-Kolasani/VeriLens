@@ -112,13 +112,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="scanner"
+        name="review"
         options={{
-          title: 'Scanner',
+          title: 'Review',
           tabBarIcon: ({ color, focused }) => (
             <View style={styles.iconWrapper}>
               <Ionicons
-                name={focused ? 'scan-circle' : 'scan-circle-outline'}
+                name={focused ? 'clipboard' : 'clipboard-outline'}
                 size={21}
                 color={color}
               />

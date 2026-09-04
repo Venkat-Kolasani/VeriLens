@@ -1,26 +1,22 @@
+import * as Crypto from 'expo-crypto';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
-import { hashMediaFile, signData, getPublicKey, getFileInfo } from './crypto';
 import { anchorProof } from './blockchain';
-import { detectDeepfake, checkPlagiarism } from './ai-detection';
-import { computeTrustScore } from './trust-score';
-import { applyVisibleWatermark, generateInvisibleWatermarkId } from './watermark';
-import { insertMediaRecord, updateMediaRecord } from './db';
-import { uploadProofToSupabase, uploadThumbnailToStorage } from './supabase';
-import type { MediaRecord, VerificationStep } from './types';
-import { getGrade } from '@/constants/Colors';
+import { getPublicKey, hashMediaFile, signData } from './crypto';
+import { insertCase, updateCase } from './db';
+import { ForensicsUnavailable, analyzeKycPair, type AnalyzeResult } from './forensics';
+import { uploadCaseImageToStorage, uploadCaseToSupabase } from './supabase';
+import type { KYCCase, VerificationStep } from './types';
 
 type ProgressCallback = (steps: VerificationStep[]) => void;
 
 function createSteps(): VerificationStep[] {
   return [
-    { id: 'hash', label: 'Generating cryptographic hash', status: 'waiting' },
-    { id: 'sign', label: 'Signing with device key', status: 'waiting' },
-    { id: 'blockchain', label: 'Anchoring on Sepolia', status: 'waiting' },
-    { id: 'ai', label: 'AI deepfake analysis', status: 'waiting' },
-    { id: 'trust', label: 'Computing trust score', status: 'waiting' },
-    { id: 'watermark', label: 'Applying watermark', status: 'waiting' },
-    { id: 'cloud', label: 'Syncing to Supabase cloud', status: 'waiting' },
+    { id: 'hash', label: 'Hashing ID document and selfie', status: 'waiting' },
+    { id: 'sign', label: 'Signing the image pair', status: 'waiting' },
+    { id: 'forensics', label: 'Running forensic analysis', status: 'waiting' },
+    { id: 'anchor', label: 'Anchoring verdict on Sepolia', status: 'waiting' },
+    { id: 'cloud', label: 'Syncing case to Supabase cloud', status: 'waiting' },
   ];
 }
 
@@ -30,222 +26,218 @@ function updateStep(
   status: VerificationStep['status'],
   detail?: string
 ): VerificationStep[] {
-  return steps.map((s) =>
-    s.id === stepId ? { ...s, status, detail } : s
-  );
+  return steps.map((s) => (s.id === stepId ? { ...s, status, detail } : s));
 }
 
-export async function runVerificationPipeline(
-  fileUri: string,
-  fileType: 'image' | 'video',
-  onProgress: ProgressCallback
-): Promise<MediaRecord> {
-  let steps = createSteps();
-  const recordId = Date.now().toString(36) + Math.random().toString(36).substring(2, 8);
-  const now = new Date().toISOString();
+/** The record that gets anchored on-chain: the verdict, not the image.
+ *
+ *  Key order is fixed so the digest is reproducible from the stored case —
+ *  a verifier can rebuild this string and confirm the on-chain hash. */
+function canonicalVerdictRecord(
+  kycCase: KYCCase,
+  analysis: AnalyzeResult
+): string {
+  return JSON.stringify({
+    id_image_sha256: kycCase.idImageSha256,
+    selfie_sha256: kycCase.selfieSha256,
+    authenticity: analysis.verdict.authenticity,
+    identity: analysis.verdict.identity,
+    decision: analysis.verdict.decision,
+    confidence: analysis.verdict.confidence,
+    lanes: (kycCase.lanes ?? []).map((l) => [l.lane, l.score, l.confidence]),
+    created_at: kycCase.createdAt,
+  });
+}
 
-  // Determine file name
-  const uriParts = fileUri.split('/');
-  const fileName = uriParts[uriParts.length - 1] || `capture_${Date.now()}`;
-
-  // Get file info
-  const fileInfo = await getFileInfo(fileUri);
-  const fileSize = (fileInfo && 'exists' in fileInfo && fileInfo.exists && 'size' in fileInfo)
-    ? (fileInfo as any).size ?? 0
-    : 0;
-
-  // Create initial record
-  const record: MediaRecord = {
-    id: recordId,
-    fileUri,
-    fileName,
-    fileType,
-    fileSize,
-    fileHash: '',
-    signature: '',
-    publicKey: '',
-    timestamp: Date.now(),
-    blockchainTx: null,
-    blockNumber: null,
-    aiDeepfakeScore: 0,
-    aiGeneratedScore: 0,
-    plagiarismScore: 0,
-    trustScore: 0,
-    trustGrade: 'F',
-    watermarkedUri: null,
-    imageUrl: null,
-    status: 'verifying',
-    deviceInfo: `${Platform.OS} ${Platform.Version}`,
-    location: null,
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  await insertMediaRecord(record);
-
+async function readBase64(uri: string): Promise<string> {
   try {
-    // Step 1: Hash
-    steps = updateStep(steps, 'hash', 'running');
-    onProgress(steps);
-    const fileHash = await hashMediaFile(fileUri);
-    record.fileHash = fileHash;
-    steps = updateStep(steps, 'hash', 'success', fileHash.substring(0, 12) + '...');
-    onProgress(steps);
-    await sleep(300);
-
-    // Step 2: Sign
-    steps = updateStep(steps, 'sign', 'running');
-    onProgress(steps);
-    const signature = await signData(fileHash);
-    const publicKey = (await getPublicKey()) ?? '';
-    record.signature = signature;
-    record.publicKey = publicKey;
-    steps = updateStep(steps, 'sign', 'success', 'Signed ✓');
-    onProgress(steps);
-    await sleep(300);
-
-    // Step 3: Blockchain anchor
-    steps = updateStep(steps, 'blockchain', 'running');
-    onProgress(steps);
-    let bcResult: { txHash: string; blockNumber: number } | null = null;
-    let bcError: string | null = null;
-    try {
-      bcResult = await anchorProof(fileHash, signature, publicKey);
-    } catch (err: any) {
-      bcError = err?.message ?? 'Anchoring failed';
-    }
-    if (bcResult) {
-      record.blockchainTx = bcResult.txHash;
-      record.blockNumber = bcResult.blockNumber;
-      steps = updateStep(
-        steps,
-        'blockchain',
-        'success',
-        `Tx: ${bcResult.txHash.substring(0, 10)}...`
-      );
-    } else {
-      steps = updateStep(
-        steps,
-        'blockchain',
-        'error',
-        bcError ?? 'Failed - will retry'
-      );
-    }
-    onProgress(steps);
-    await sleep(300);
-
-    // Step 4: AI detection
-    steps = updateStep(steps, 'ai', 'running');
-    onProgress(steps);
-
-    let imageBase64 = '';
-    try {
-      if (fileType === 'image') {
-        imageBase64 = await FileSystem.readAsStringAsync(fileUri, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
-      }
-    } catch { }
-
-    const aiResult = await detectDeepfake(imageBase64);
-    record.aiDeepfakeScore = aiResult.deepfakeScore;
-    record.aiGeneratedScore = aiResult.aiGeneratedScore;
-    steps = updateStep(
-      steps,
-      'ai',
-      aiResult.simulated ? 'error' : 'success',
-      aiResult.simulated
-        ? 'Simulated — API unavailable'
-        : aiResult.isGenuine
-        ? 'Genuine ✓'
-        : `Suspicious (${(aiResult.deepfakeScore * 100).toFixed(0)}%)`
-    );
-    onProgress(steps);
-    await sleep(300);
-
-    // Step 5: Plagiarism (silent — no visible step, no real API)
-    const plagiarismResult = await checkPlagiarism(imageBase64);
-    record.plagiarismScore = plagiarismResult.matchPercentage;
-
-    // Step 5 (visible): Trust score
-    steps = updateStep(steps, 'trust', 'running');
-    onProgress(steps);
-    const trustResult = computeTrustScore({
-      hashVerified: true,
-      signatureValid: true,
-      blockchainAnchored: bcResult !== null,
-      deepfakeScore: aiResult.deepfakeScore,
-      aiGeneratedScore: aiResult.aiGeneratedScore,
-      plagiarismScore: plagiarismResult.matchPercentage,
-      hasMetadata: true,
+    return await FileSystem.readAsStringAsync(uri, {
+      encoding: FileSystem.EncodingType.Base64,
     });
-    record.trustScore = trustResult.score;
-    record.trustGrade = trustResult.grade;
-    steps = updateStep(
-      steps,
-      'trust',
-      'success',
-      `Score: ${trustResult.score} (Grade ${trustResult.grade})`
-    );
-    onProgress(steps);
-    await sleep(300);
-
-    // Step 7: Watermark
-    steps = updateStep(steps, 'watermark', 'running');
-    onProgress(steps);
-    if (fileType === 'image') {
-      const watermarkedUri = await applyVisibleWatermark(
-        fileUri,
-        trustResult.score,
-        trustResult.grade
-      );
-      record.watermarkedUri = watermarkedUri;
-    }
-    const wmId = generateInvisibleWatermarkId();
-    steps = updateStep(steps, 'watermark', 'success', `ID: ${wmId}`);
-    onProgress(steps);
-
-    // Step 8: Supabase cloud sync
-    steps = updateStep(steps, 'cloud', 'running');
-    onProgress(steps);
-
-    // Upload image to Supabase storage bucket first
-    if (imageBase64 && imageBase64.length > 0) {
-      try {
-        const publicImageUrl = await uploadThumbnailToStorage(recordId, imageBase64, 'image/jpeg');
-        if (publicImageUrl) {
-          record.imageUrl = publicImageUrl;
-          console.log('[Pipeline] Image uploaded to Supabase storage:', publicImageUrl);
-        }
-      } catch (err) {
-        console.warn('[Pipeline] Image upload to storage failed:', err);
-      }
-    }
-
-    const cloudSynced = await uploadProofToSupabase(record);
-    steps = updateStep(
-      steps,
-      'cloud',
-      cloudSynced ? 'success' : 'error',
-      cloudSynced ? 'Synced ✓' : 'Local only'
-    );
-    onProgress(steps);
-
-    // Final: Mark verified
-    record.status = 'verified';
-    record.updatedAt = new Date().toISOString();
-    await updateMediaRecord(recordId, record);
-
-    return record;
-  } catch (error) {
-    console.error('Verification pipeline error:', error);
-    record.status = 'failed';
-    record.updatedAt = new Date().toISOString();
-    await updateMediaRecord(recordId, { status: 'failed' });
-    throw error;
+  } catch {
+    return '';
   }
 }
 
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+export async function runKycCheck(
+  idImageUri: string,
+  selfieUri: string,
+  idAttested: boolean,
+  onProgress: ProgressCallback
+): Promise<KYCCase> {
+  let steps = createSteps();
+  const caseId = Date.now().toString(36) + Math.random().toString(36).substring(2, 8);
+  const now = new Date().toISOString();
+
+  const kycCase: KYCCase = {
+    id: caseId,
+    createdAt: now,
+    updatedAt: now,
+    idImageUri,
+    idImageSha256: '',
+    idImageAttested: idAttested,
+    idImageUrl: null,
+    selfieUri,
+    selfieSha256: '',
+    // The selfie is always camera-captured: app/(tabs)/capture.tsx has no
+    // picker path for it, only for the ID document.
+    selfieAttested: true,
+    selfieUrl: null,
+    lanes: null,
+    authenticity: null,
+    identity: null,
+    decision: null,
+    confidence: null,
+    confidenceIsCalibrated: false,
+    reasons: null,
+    anchorTx: null,
+    anchorBlock: null,
+    anchorPayloadHash: null,
+    signature: '',
+    publicKey: '',
+    reviewStatus: null,
+    status: 'analyzing',
+    deviceInfo: `${Platform.OS} ${Platform.Version}`,
+  };
+
+  await insertCase(kycCase);
+
+  // Steps 1-2: Hash both images, then sign the pair. A failure here is fatal
+  // (no hash, nothing to analyse or anchor) so the case is marked failed.
+  try {
+    steps = updateStep(steps, 'hash', 'running');
+    onProgress(steps);
+    kycCase.idImageSha256 = await hashMediaFile(idImageUri);
+    kycCase.selfieSha256 = await hashMediaFile(selfieUri);
+    steps = updateStep(
+      steps,
+      'hash',
+      'success',
+      `ID ${kycCase.idImageSha256.substring(0, 8)}… · selfie ${kycCase.selfieSha256.substring(0, 8)}…`
+    );
+    onProgress(steps);
+
+    steps = updateStep(steps, 'sign', 'running');
+    onProgress(steps);
+    kycCase.signature = await signData(
+      kycCase.idImageSha256 + kycCase.selfieSha256
+    );
+    kycCase.publicKey = (await getPublicKey()) ?? '';
+    steps = updateStep(steps, 'sign', 'success', 'Pair signed with device key');
+    onProgress(steps);
+  } catch (err: any) {
+    steps = updateStep(
+      steps,
+      kycCase.idImageSha256 ? 'sign' : 'hash',
+      'error',
+      err?.message ?? 'Failed'
+    );
+    onProgress(steps);
+    kycCase.status = 'failed';
+    await updateCase(caseId, { status: 'failed' });
+    throw err;
+  }
+
+  // Step 3: Forensic analysis
+  //
+  // A ForensicsUnavailable here is terminal for the case: the verdict fields
+  // stay null and the status becomes 'failed'. Nothing is synthesised — an
+  // unreachable detector is not evidence of anything.
+  steps = updateStep(steps, 'forensics', 'running');
+  onProgress(steps);
+  let analysis: AnalyzeResult;
+  try {
+    // The selfie is the image injection defence cares about, and it is
+    // always attested here.
+    analysis = await analyzeKycPair(idImageUri, selfieUri, kycCase.selfieAttested);
+  } catch (err: any) {
+    const detail =
+      err instanceof ForensicsUnavailable
+        ? 'Detection service unavailable — no verdict'
+        : (err?.message ?? 'Analysis failed');
+    steps = updateStep(steps, 'forensics', 'error', detail);
+    steps = updateStep(steps, 'anchor', 'error', 'Skipped — nothing to anchor');
+    steps = updateStep(steps, 'cloud', 'error', 'Skipped — no verdict to sync');
+    onProgress(steps);
+
+    kycCase.status = 'failed';
+    kycCase.updatedAt = new Date().toISOString();
+    await updateCase(caseId, {
+      idImageSha256: kycCase.idImageSha256,
+      selfieSha256: kycCase.selfieSha256,
+      signature: kycCase.signature,
+      publicKey: kycCase.publicKey,
+      status: 'failed',
+    });
+    return kycCase;
+  }
+
+  const { verdict } = analysis;
+  kycCase.lanes = [
+    ...(analysis.id_image?.lanes ?? []),
+    ...(analysis.selfie?.lanes ?? []),
+  ];
+  kycCase.authenticity = verdict.authenticity;
+  kycCase.identity = verdict.identity;
+  kycCase.decision = verdict.decision;
+  kycCase.confidence = verdict.confidence;
+  kycCase.confidenceIsCalibrated = verdict.confidence_is_calibrated;
+  kycCase.reasons = verdict.reasons;
+  kycCase.reviewStatus = verdict.decision === 'REVIEW' ? 'pending' : null;
+  steps = updateStep(
+    steps,
+    'forensics',
+    'success',
+    `${verdict.authenticity} · ${verdict.identity ?? 'NO IDENTITY'} · ${verdict.decision}`
+  );
+  onProgress(steps);
+
+  // Step 4: Anchor the verdict digest (not the image hash). Non-fatal.
+  steps = updateStep(steps, 'anchor', 'running');
+  onProgress(steps);
+  try {
+    const payloadHash = await Crypto.digestStringAsync(
+      Crypto.CryptoDigestAlgorithm.SHA256,
+      canonicalVerdictRecord(kycCase, analysis)
+    );
+    kycCase.anchorPayloadHash = payloadHash;
+    const anchor = await anchorProof(
+      payloadHash,
+      kycCase.signature,
+      kycCase.publicKey
+    );
+    if (anchor) {
+      kycCase.anchorTx = anchor.txHash;
+      kycCase.anchorBlock = anchor.blockNumber;
+      steps = updateStep(steps, 'anchor', 'success', `Tx ${anchor.txHash.substring(0, 10)}…`);
+    } else {
+      steps = updateStep(steps, 'anchor', 'error', 'Anchoring failed — verdict kept locally');
+    }
+  } catch (err: any) {
+    steps = updateStep(steps, 'anchor', 'error', err?.message ?? 'Anchoring failed');
+  }
+  onProgress(steps);
+
+  // Step 5: Cloud sync. Non-fatal.
+  steps = updateStep(steps, 'cloud', 'running');
+  onProgress(steps);
+  const [idBase64, selfieBase64] = await Promise.all([
+    readBase64(idImageUri),
+    readBase64(selfieUri),
+  ]);
+  if (idBase64) {
+    kycCase.idImageUrl = await uploadCaseImageToStorage(caseId, 'id', idBase64);
+  }
+  if (selfieBase64) {
+    kycCase.selfieUrl = await uploadCaseImageToStorage(caseId, 'selfie', selfieBase64);
+  }
+  const cloudSynced = await uploadCaseToSupabase(kycCase);
+  steps = updateStep(steps, 'cloud', cloudSynced ? 'success' : 'error', cloudSynced ? 'Synced' : 'Local only');
+  onProgress(steps);
+
+  kycCase.status = 'complete';
+  kycCase.updatedAt = new Date().toISOString();
+  await updateCase(caseId, kycCase);
+
+  return kycCase;
 }

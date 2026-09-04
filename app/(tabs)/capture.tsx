@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -8,12 +8,13 @@ import {
   Modal,
   ScrollView,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
-import Animated, { FadeIn, FadeInDown, FadeInUp } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInUp } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -22,52 +23,77 @@ import { Colors } from '@/constants/Colors';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { useAppStore } from '@/stores/media-store';
 import { VerificationSteps } from '@/components/VerificationSteps';
-import { TrustScoreCircle } from '@/components/TrustScoreCircle';
+import { VerdictAxes, VerdictReasons } from '@/components/Verdict';
+
+// Two images make a KYC case: the ID document, then a live selfie.
+//
+// The ID document may be imported from the gallery (people photograph their
+// passport once). The SELFIE MAY NOT: an importable selfie is the whole
+// injection attack this app exists to catch, so that step is camera-only and
+// there is deliberately no picker fallback anywhere in this screen.
+type Stage = 'id' | 'selfie';
 
 export default function CaptureScreen() {
-  const [facing, setFacing] = useState<'front' | 'back'>('back');
+  const [stage, setStage] = useState<Stage>('id');
+  const [idImageUri, setIdImageUri] = useState<string | null>(null);
+  const [idImported, setIdImported] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
-  const [showVerification, setShowVerification] = useState(false);
+  const [showCheck, setShowCheck] = useState(false);
   const cameraRef = useRef<CameraView>(null);
   const insets = useSafeAreaInsets();
   const { isDark, colors } = useThemeColors();
   const router = useRouter();
-  const { startVerification, currentVerification, clearVerification } = useAppStore();
+  const { startKycCheck, currentCheck, clearCheck } = useAppStore();
+
+  const runCheck = async (idUri: string, selfieUri: string, idAttested: boolean) => {
+    setShowCheck(true);
+    try {
+      // idAttested = the ID document came straight off this device's camera.
+      // The selfie is always camera-captured, so the pipeline hard-codes that.
+      await startKycCheck(idUri, selfieUri, idAttested);
+    } catch (err: any) {
+      Alert.alert('Check Failed', err?.message ?? 'Please try again.');
+    }
+  };
 
   const handleCapture = async () => {
     if (!cameraRef.current) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
     try {
-      const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.85,
-      });
+      const photo = await cameraRef.current.takePictureAsync({ quality: 0.85 });
+      if (!photo?.uri) return;
 
-      if (photo?.uri) {
-        setShowVerification(true);
-        await startVerification(photo.uri, 'image');
+      if (stage === 'id') {
+        setIdImageUri(photo.uri);
+        setIdImported(false);
+        setStage('selfie');
+        return;
       }
+
+      if (!idImageUri) return;
+      await runCheck(idImageUri, photo.uri, !idImported);
     } catch (error) {
       console.error('Capture failed:', error);
       Alert.alert('Capture Failed', 'Please try again.');
     }
   };
 
-  const handleImport = async () => {
+  // Gallery import — ID document only.
+  const handleImportId = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images', 'videos'],
+        mediaTypes: ['images'],
         // NOTE: Do NOT set quality here. Specifying quality causes JPEG
         // recompression, which produces different bytes on every pick
         // and breaks verify-by-image hash matching.
       });
 
       if (!result.canceled && result.assets[0]) {
-        const asset = result.assets[0];
-        const fileType = asset.type === 'video' ? 'video' : 'image';
-        setShowVerification(true);
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        await startVerification(asset.uri, fileType as 'image' | 'video');
+        setIdImageUri(result.assets[0].uri);
+        setIdImported(true);
+        setStage('selfie');
       }
     } catch (error) {
       console.error('Import failed:', error);
@@ -75,10 +101,13 @@ export default function CaptureScreen() {
     }
   };
 
-  const handleDismissVerification = () => {
-    setShowVerification(false);
-    const result = currentVerification?.result;
-    clearVerification();
+  const handleDismissCheck = () => {
+    setShowCheck(false);
+    const result = currentCheck?.result;
+    clearCheck();
+    setIdImageUri(null);
+    setIdImported(false);
+    setStage('id');
     if (result) {
       router.push(`/verify/${result.id}` as any);
     }
@@ -94,7 +123,8 @@ export default function CaptureScreen() {
         <Ionicons name="camera-outline" size={64} color={colors.textSecondary} style={{ opacity: 0.5 }} />
         <Text style={[styles.permissionText, { color: colors.text }]}>Camera Access Required</Text>
         <Text style={[styles.permissionSubtext, { color: colors.textSecondary }]}>
-          VeriLens needs camera access to capture and verify media authenticity.
+          A KYC case needs a live selfie taken on this device. The selfie cannot be
+          imported from the gallery, so camera access is required.
         </Text>
         <Pressable
           onPress={requestPermission}
@@ -102,21 +132,20 @@ export default function CaptureScreen() {
         >
           <Text style={styles.permissionButtonText}>Grant Permission</Text>
         </Pressable>
-        <Pressable onPress={handleImport} style={styles.importAltButton}>
-          <Text style={[styles.importAltText, { color: Colors.primary[500] }]}>
-            Or import from gallery
-          </Text>
-        </Pressable>
       </View>
     );
   }
+
+  const isSelfieStage = stage === 'selfie';
+  const result = currentCheck?.result;
+  const failed = result?.status === 'failed';
 
   return (
     <View style={[styles.container, { backgroundColor: '#000' }]}>
       <CameraView
         ref={cameraRef}
         style={styles.camera}
-        facing={facing}
+        facing={isSelfieStage ? 'front' : 'back'}
       />
 
       {/* Top overlay */}
@@ -128,10 +157,17 @@ export default function CaptureScreen() {
         <View style={styles.topRow}>
           <View style={styles.cameraModePill}>
             <View style={styles.liveDot} />
-            <Ionicons name="camera" size={14} color="#FFFFFF" />
-            <Text style={styles.cameraModeText}>VeriLens Camera</Text>
+            <Ionicons name={isSelfieStage ? 'person' : 'card'} size={14} color="#FFFFFF" />
+            <Text style={styles.cameraModeText}>
+              {isSelfieStage ? 'Step 2 · Live selfie' : 'Step 1 · ID document'}
+            </Text>
           </View>
         </View>
+        <Text style={styles.hintText}>
+          {isSelfieStage
+            ? 'Look straight at the front camera. Camera only — no gallery.'
+            : 'Fit the whole document inside the guides.'}
+        </Text>
       </LinearGradient>
 
       {/* Corner guides */}
@@ -147,19 +183,28 @@ export default function CaptureScreen() {
         colors={['transparent', 'rgba(0,0,0,0.7)']}
         style={[styles.bottomOverlay, { paddingBottom: insets.bottom + 84 }]}
       >
-        {/* Import button */}
-        <Pressable
-          onPress={handleImport}
-          style={({ pressed }) => [
-            styles.sideButton,
-            { opacity: pressed ? 0.7 : 1, transform: [{ scale: pressed ? 0.9 : 1 }] },
-          ]}
-        >
-          <View style={styles.sideButtonBg}>
-            <Ionicons name="images" size={24} color="#FFFFFF" />
+        {/* ID stage: import allowed. Selfie stage: captured ID thumbnail. */}
+        {isSelfieStage ? (
+          <View style={styles.sideButton}>
+            {idImageUri && (
+              <Image source={{ uri: idImageUri }} style={styles.idThumb} resizeMode="cover" />
+            )}
+            <Text style={styles.sideButtonText}>ID ✓</Text>
           </View>
-          <Text style={styles.sideButtonText}>Import</Text>
-        </Pressable>
+        ) : (
+          <Pressable
+            onPress={handleImportId}
+            style={({ pressed }) => [
+              styles.sideButton,
+              { opacity: pressed ? 0.7 : 1, transform: [{ scale: pressed ? 0.9 : 1 }] },
+            ]}
+          >
+            <View style={styles.sideButtonBg}>
+              <Ionicons name="images" size={24} color="#FFFFFF" />
+            </View>
+            <Text style={styles.sideButtonText}>Import ID</Text>
+          </Pressable>
+        )}
 
         {/* Capture button */}
         <Pressable
@@ -170,52 +215,74 @@ export default function CaptureScreen() {
           ]}
         >
           <LinearGradient
-            colors={['#3B82F6', '#8B5CF6']}
+            colors={isSelfieStage ? ['#10B981', '#059669'] : ['#3B82F6', '#8B5CF6']}
             style={styles.captureGradient}
           >
             <View style={styles.captureInner} />
           </LinearGradient>
         </Pressable>
 
-        {/* Flip camera */}
-        <Pressable
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            setFacing((f) => (f === 'back' ? 'front' : 'back'));
-          }}
-          style={({ pressed }) => [
-            styles.sideButton,
-            { opacity: pressed ? 0.7 : 1, transform: [{ scale: pressed ? 0.9 : 1 }] },
-          ]}
-        >
-          <View style={styles.sideButtonBg}>
-            <Ionicons name="camera-reverse" size={24} color="#FFFFFF" />
+        {/* Restart the case */}
+        {isSelfieStage ? (
+          <Pressable
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setIdImageUri(null);
+              setIdImported(false);
+              setStage('id');
+            }}
+            style={({ pressed }) => [
+              styles.sideButton,
+              { opacity: pressed ? 0.7 : 1, transform: [{ scale: pressed ? 0.9 : 1 }] },
+            ]}
+          >
+            <View style={styles.sideButtonBg}>
+              <Ionicons name="refresh" size={24} color="#FFFFFF" />
+            </View>
+            <Text style={styles.sideButtonText}>Retake ID</Text>
+          </Pressable>
+        ) : (
+          <View style={styles.sideButton}>
+            <View style={[styles.sideButtonBg, { opacity: 0.25 }]}>
+              <Ionicons name="person" size={24} color="#FFFFFF" />
+            </View>
+            <Text style={[styles.sideButtonText, { opacity: 0.5 }]}>Selfie next</Text>
           </View>
-          <Text style={styles.sideButtonText}>Flip</Text>
-        </Pressable>
+        )}
       </LinearGradient>
 
       {/* Verification Modal */}
       <Modal
-        visible={showVerification}
+        visible={showCheck}
         animationType="slide"
         presentationStyle="pageSheet"
-        onRequestClose={handleDismissVerification}
+        onRequestClose={handleDismissCheck}
       >
         <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
           <View style={[styles.modalHandle, { backgroundColor: isDark ? Colors.dark.elevated : Colors.light.border }]} />
 
           <ScrollView contentContainerStyle={styles.modalContent} showsVerticalScrollIndicator={false}>
-            {/* Header icon */}
             <Animated.View entering={FadeIn.duration(400)} style={styles.modalHeaderIcon}>
               <LinearGradient
-                colors={currentVerification?.isRunning ? ['#3B82F6', '#8B5CF6'] : ['#10B981', '#059669']}
+                colors={
+                  currentCheck?.isRunning
+                    ? ['#3B82F6', '#8B5CF6']
+                    : failed
+                    ? ['#EF4444', '#B91C1C']
+                    : ['#10B981', '#059669']
+                }
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={styles.modalIconCircle}
               >
                 <Ionicons
-                  name={currentVerification?.isRunning ? 'shield-half' : 'shield-checkmark'}
+                  name={
+                    currentCheck?.isRunning
+                      ? 'shield-half'
+                      : failed
+                      ? 'alert-circle'
+                      : 'shield-checkmark'
+                  }
                   size={32}
                   color="#FFFFFF"
                 />
@@ -223,71 +290,116 @@ export default function CaptureScreen() {
             </Animated.View>
 
             <Text style={[styles.modalTitle, { color: colors.text }]}>
-              {currentVerification?.isRunning ? 'Verifying Media...' : 'Verification Complete'}
+              {currentCheck?.isRunning
+                ? 'Running KYC check…'
+                : failed
+                ? 'No verdict produced'
+                : 'Check complete'}
             </Text>
             <Text style={[styles.modalSubtitle, { color: colors.textSecondary }]}>
-              {currentVerification?.isRunning
-                ? 'Please wait while we authenticate your media'
-                : 'Your media has been cryptographically verified'}
+              {currentCheck?.isRunning
+                ? 'Hashing, signing and analysing the ID document and selfie'
+                : failed
+                ? 'The forensics service could not be reached, so this case has no verdict. Nothing was guessed.'
+                : 'Three independent axes, each with its own evidence'}
             </Text>
 
-            {currentVerification?.steps && currentVerification.steps.length > 0 && (
+            {currentCheck?.steps && currentCheck.steps.length > 0 && (
               <View style={styles.stepsWrapper}>
-                <VerificationSteps steps={currentVerification.steps} />
+                <VerificationSteps steps={currentCheck.steps} />
               </View>
             )}
 
-            {!currentVerification?.isRunning && currentVerification?.result && (
+            {!currentCheck?.isRunning && result && (
               <Animated.View entering={FadeInUp.springify()} style={styles.resultContainer}>
-                {/* Trust score */}
-                <View style={[styles.resultCard, { backgroundColor: isDark ? Colors.dark.card : Colors.light.card, borderColor: isDark ? Colors.dark.border : Colors.light.border }]}>
-                  <TrustScoreCircle score={currentVerification.result.trustScore} />
-                  <Text style={[styles.resultText, { color: colors.text }]}>
-                    Media Verified Successfully
-                  </Text>
+                <View
+                  style={[
+                    styles.resultCard,
+                    {
+                      backgroundColor: isDark ? Colors.dark.card : Colors.light.card,
+                      borderColor: isDark ? Colors.dark.border : Colors.light.border,
+                    },
+                  ]}
+                >
+                  <VerdictAxes
+                    authenticity={result.authenticity}
+                    identity={result.identity}
+                    decision={result.decision}
+                    confidence={result.confidence}
+                    isCalibrated={result.confidenceIsCalibrated}
+                  />
                 </View>
 
-                {/* Result details */}
-                <View style={[styles.resultDetailsCard, { backgroundColor: isDark ? Colors.dark.card : Colors.light.card, borderColor: isDark ? Colors.dark.border : Colors.light.border }]}>
-                  {currentVerification.result.blockchainTx && (
+                <View
+                  style={[
+                    styles.resultCard,
+                    {
+                      backgroundColor: isDark ? Colors.dark.card : Colors.light.card,
+                      borderColor: isDark ? Colors.dark.border : Colors.light.border,
+                      alignItems: 'flex-start',
+                    },
+                  ]}
+                >
+                  <Text style={[styles.resultSectionTitle, { color: colors.text }]}>
+                    Why
+                  </Text>
+                  <VerdictReasons reasons={result.reasons} lanes={result.lanes} />
+                </View>
+
+                <View
+                  style={[
+                    styles.resultDetailsCard,
+                    {
+                      backgroundColor: isDark ? Colors.dark.card : Colors.light.card,
+                      borderColor: isDark ? Colors.dark.border : Colors.light.border,
+                    },
+                  ]}
+                >
+                  {result.anchorTx && (
                     <View style={styles.resultDetailRow}>
                       <View style={[styles.resultDetailIcon, { backgroundColor: '#8B5CF620' }]}>
                         <Ionicons name="link" size={16} color="#8B5CF6" />
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={[styles.resultDetailLabel, { color: colors.textSecondary }]}>Blockchain Tx</Text>
+                        <Text style={[styles.resultDetailLabel, { color: colors.textSecondary }]}>
+                          Verdict anchored (Sepolia)
+                        </Text>
                         <Text style={[styles.resultDetailValue, { color: colors.text }]} numberOfLines={1}>
-                          {currentVerification.result.blockchainTx.substring(0, 24)}...
+                          {result.anchorTx.substring(0, 24)}...
                         </Text>
                       </View>
                     </View>
                   )}
                   <View style={styles.resultDetailRow}>
                     <View style={[styles.resultDetailIcon, { backgroundColor: '#3B82F620' }]}>
-                      <Ionicons name="finger-print" size={16} color="#3B82F6" />
+                      <Ionicons name="card" size={16} color="#3B82F6" />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.resultDetailLabel, { color: colors.textSecondary }]}>File Hash (SHA-256)</Text>
+                      <Text style={[styles.resultDetailLabel, { color: colors.textSecondary }]}>
+                        ID document (SHA-256)
+                      </Text>
                       <Text style={[styles.resultDetailValue, { color: colors.text }]} numberOfLines={1}>
-                        {currentVerification.result.fileHash.substring(0, 24)}...
+                        {result.idImageSha256.substring(0, 24) || '—'}...
                       </Text>
                     </View>
                   </View>
                   <View style={styles.resultDetailRow}>
                     <View style={[styles.resultDetailIcon, { backgroundColor: '#10B98120' }]}>
-                      <Ionicons name="shield-checkmark" size={16} color="#10B981" />
+                      <Ionicons name="person" size={16} color="#10B981" />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.resultDetailLabel, { color: colors.textSecondary }]}>Trust Grade</Text>
-                      <Text style={[styles.resultDetailValue, { color: colors.text }]}>
-                        Grade {currentVerification.result.trustGrade} — Score {currentVerification.result.trustScore}/100
+                      <Text style={[styles.resultDetailLabel, { color: colors.textSecondary }]}>
+                        Selfie (SHA-256)
+                      </Text>
+                      <Text style={[styles.resultDetailValue, { color: colors.text }]} numberOfLines={1}>
+                        {result.selfieSha256.substring(0, 24) || '—'}...
                       </Text>
                     </View>
                   </View>
                 </View>
 
                 <Pressable
-                  onPress={handleDismissVerification}
+                  onPress={handleDismissCheck}
                   style={({ pressed }) => [{ opacity: pressed ? 0.9 : 1, transform: [{ scale: pressed ? 0.97 : 1 }] }]}
                 >
                   <LinearGradient
@@ -296,14 +408,14 @@ export default function CaptureScreen() {
                     end={{ x: 1, y: 0 }}
                     style={styles.viewDetailsButton}
                   >
-                    <Text style={styles.viewDetailsText}>View Full Details</Text>
+                    <Text style={styles.viewDetailsText}>View Full Case</Text>
                     <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
                   </LinearGradient>
                 </Pressable>
               </Animated.View>
             )}
 
-            {currentVerification?.isRunning && (
+            {currentCheck?.isRunning && (
               <View style={styles.runningIndicator}>
                 <ActivityIndicator size="small" color={Colors.primary[500]} />
                 <Text style={[styles.runningText, { color: colors.textSecondary }]}>
@@ -353,6 +465,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#EF4444',
   },
   cameraModeText: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
+  hintText: {
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 8,
+  },
   cornerGuides: {
     position: 'absolute',
     top: '20%',
@@ -417,6 +536,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.15)',
   },
+  idThumb: {
+    width: 50,
+    height: 50,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: 'rgba(16,185,129,0.9)',
+    backgroundColor: '#000',
+  },
   sideButtonText: { color: '#FFFFFF', fontSize: 11, fontWeight: '600' },
   permissionText: { fontSize: 22, fontWeight: '800', marginTop: 20 },
   permissionSubtext: { fontSize: 14, textAlign: 'center', marginTop: 10, lineHeight: 22, opacity: 0.8 },
@@ -427,8 +554,6 @@ const styles = StyleSheet.create({
     marginTop: 28,
   },
   permissionButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
-  importAltButton: { marginTop: 18 },
-  importAltText: { fontSize: 14, fontWeight: '700' },
   // Modal
   modalContainer: { flex: 1, paddingTop: 14 },
   modalHandle: {
@@ -454,13 +579,13 @@ const styles = StyleSheet.create({
   resultCard: {
     width: '100%',
     alignItems: 'center',
-    paddingVertical: 28,
-    paddingHorizontal: 20,
+    paddingVertical: 20,
+    paddingHorizontal: 18,
     borderRadius: 22,
     borderWidth: 1,
     gap: 12,
   },
-  resultText: { fontSize: 18, fontWeight: '800', marginTop: 4, letterSpacing: -0.3 },
+  resultSectionTitle: { fontSize: 15, fontWeight: '800', letterSpacing: -0.2 },
   resultDetailsCard: {
     width: '100%',
     borderRadius: 22,
@@ -484,7 +609,6 @@ const styles = StyleSheet.create({
   },
   resultDetailLabel: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.3 },
   resultDetailValue: { fontSize: 13, fontWeight: '600', marginTop: 2 },
-  txText: { fontSize: 12, marginTop: 4, opacity: 0.7 },
   viewDetailsButton: {
     flexDirection: 'row',
     alignItems: 'center',

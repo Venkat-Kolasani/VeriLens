@@ -1,7 +1,7 @@
 import { create } from 'zustand';
-import type { MediaRecord, VerificationStep } from '@/lib/types';
-import { getAllRecords, getStats } from '@/lib/db';
-import { runVerificationPipeline } from '@/lib/pipeline';
+import type { KYCCase, VerificationStep } from '@/lib/types';
+import { getAllCases, getStats } from '@/lib/db';
+import { runKycCheck } from '@/lib/pipeline';
 import { hasKeys, generateKeyPair, getPublicKey } from '@/lib/crypto';
 import { getWalletAddress, getWalletBalance } from '@/lib/blockchain';
 
@@ -13,16 +13,16 @@ interface AppState {
   walletAddress: string | null;
   walletBalance: string;
 
-  // Media
-  records: MediaRecord[];
-  currentVerification: {
+  // Cases
+  cases: KYCCase[];
+  currentCheck: {
     steps: VerificationStep[];
     isRunning: boolean;
-    result: MediaRecord | null;
+    result: KYCCase | null;
   } | null;
 
   // Stats
-  stats: { total: number; verified: number; onChain: number };
+  stats: { total: number; accepted: number; review: number; onChain: number };
 
   // Theme
   onboardingDone: boolean;
@@ -30,10 +30,14 @@ interface AppState {
   // Actions
   initialize: () => Promise<void>;
   setupKeys: () => Promise<void>;
-  loadRecords: () => Promise<void>;
+  loadCases: () => Promise<void>;
   refreshStats: () => Promise<void>;
-  startVerification: (fileUri: string, fileType: 'image' | 'video') => Promise<MediaRecord>;
-  clearVerification: () => void;
+  startKycCheck: (
+    idImageUri: string,
+    selfieUri: string,
+    idAttested: boolean
+  ) => Promise<KYCCase>;
+  clearCheck: () => void;
   setOnboardingDone: () => void;
   refreshWallet: () => Promise<void>;
 }
@@ -44,9 +48,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   publicKey: null,
   walletAddress: null,
   walletBalance: '0.0',
-  records: [],
-  currentVerification: null,
-  stats: { total: 0, verified: 0, onChain: 0 },
+  cases: [],
+  currentCheck: null,
+  stats: { total: 0, accepted: 0, review: 0, onChain: 0 },
   onboardingDone: false,
 
   initialize: async () => {
@@ -56,14 +60,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (keyExists) {
         pk = await getPublicKey();
       }
-      const records = await getAllRecords();
+      const cases = await getAllCases();
       const stats = await getStats();
 
       set({
         isInitialized: true,
         hasKeyPair: keyExists,
         publicKey: pk,
-        records,
+        cases,
         stats,
         onboardingDone: keyExists,
       });
@@ -84,9 +88,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     get().refreshWallet();
   },
 
-  loadRecords: async () => {
-    const records = await getAllRecords();
-    set({ records });
+  loadCases: async () => {
+    const cases = await getAllCases();
+    set({ cases });
   },
 
   refreshStats: async () => {
@@ -94,51 +98,40 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ stats });
   },
 
-  startVerification: async (fileUri: string, fileType: 'image' | 'video') => {
-    set({
-      currentVerification: {
-        steps: [],
-        isRunning: true,
-        result: null,
-      },
-    });
+  startKycCheck: async (idImageUri: string, selfieUri: string, idAttested: boolean) => {
+    set({ currentCheck: { steps: [], isRunning: true, result: null } });
 
     try {
-      const record = await runVerificationPipeline(
-        fileUri,
-        fileType,
-        (steps) => {
-          set((state) => ({
-            currentVerification: state.currentVerification
-              ? { ...state.currentVerification, steps }
-              : null,
-          }));
-        }
-      );
+      const kycCase = await runKycCheck(idImageUri, selfieUri, idAttested, (steps) => {
+        set((state) => ({
+          currentCheck: state.currentCheck
+            ? { ...state.currentCheck, steps }
+            : null,
+        }));
+      });
 
       set((state) => ({
-        currentVerification: state.currentVerification
-          ? { ...state.currentVerification, isRunning: false, result: record }
+        currentCheck: state.currentCheck
+          ? { ...state.currentCheck, isRunning: false, result: kycCase }
           : null,
       }));
 
-      // Refresh records and stats
-      await get().loadRecords();
+      await get().loadCases();
       await get().refreshStats();
 
-      return record;
+      return kycCase;
     } catch (error) {
       set((state) => ({
-        currentVerification: state.currentVerification
-          ? { ...state.currentVerification, isRunning: false }
+        currentCheck: state.currentCheck
+          ? { ...state.currentCheck, isRunning: false }
           : null,
       }));
       throw error;
     }
   },
 
-  clearVerification: () => {
-    set({ currentVerification: null });
+  clearCheck: () => {
+    set({ currentCheck: null });
   },
 
   setOnboardingDone: () => {

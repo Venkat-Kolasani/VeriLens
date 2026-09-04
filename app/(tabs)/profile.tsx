@@ -147,12 +147,12 @@ export default function ProfileScreen() {
         <Animated.View entering={FadeInDown.delay(200).springify()} style={[styles.statsContainer, { backgroundColor: isDark ? Colors.dark.card : Colors.light.card, borderColor: isDark ? Colors.dark.border : Colors.light.border }]}>
           <View style={styles.statItem}>
             <Text style={[styles.statNumber, { color: Colors.primary[500] }]}>{stats.total}</Text>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Total</Text>
+            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Cases</Text>
           </View>
           <View style={[styles.statDivider, { backgroundColor: isDark ? Colors.dark.border : Colors.light.border }]} />
           <View style={styles.statItem}>
-            <Text style={[styles.statNumber, { color: Colors.success }]}>{stats.verified}</Text>
-            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Verified</Text>
+            <Text style={[styles.statNumber, { color: Colors.success }]}>{stats.accepted}</Text>
+            <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Accepted</Text>
           </View>
           <View style={[styles.statDivider, { backgroundColor: isDark ? Colors.dark.border : Colors.light.border }]} />
           <View style={styles.statItem}>
@@ -262,19 +262,19 @@ export default function ProfileScreen() {
         <InfoRow icon="information-circle" label="Version" value="1.0.0" delay={600} />
         <InfoRow icon="shield" label="Security" value="Ed25519 + SHA-256" delay={650} />
         <InfoRow icon="link" label="Blockchain" value={`Sepolia (EVM, Chain ${CHAIN_ID})`} delay={700} />
-        <InfoRow icon="eye" label="AI Detection" value="SightEngine" delay={750} />
+        <InfoRow icon="eye" label="Forensics" value="Self-hosted lane detectors" delay={750} />
 
         {/* How It Works */}
         <Animated.View entering={FadeInDown.delay(800).springify()}>
           <View style={[styles.howItWorks, { backgroundColor: isDark ? Colors.dark.card : Colors.light.card, borderColor: isDark ? Colors.dark.border : Colors.light.border }]}>
             <Text style={[styles.howTitle, { color: colors.text }]}>How VeriLens Works</Text>
             {[
-              { step: '1', text: 'Capture or import media', icon: 'camera' },
-              { step: '2', text: 'Generate SHA-256 hash', icon: 'finger-print' },
-              { step: '3', text: 'Sign with Ed25519 device key', icon: 'key' },
-              { step: '4', text: 'Anchor proof on Sepolia blockchain', icon: 'link' },
-              { step: '5', text: 'AI deepfake & plagiarism analysis', icon: 'eye' },
-              { step: '6', text: 'Compute trust score & watermark', icon: 'shield-checkmark' },
+              { step: '1', text: 'Photograph the ID document', icon: 'card' },
+              { step: '2', text: 'Take a live selfie (camera only)', icon: 'person' },
+              { step: '3', text: 'SHA-256 both images, sign the pair', icon: 'finger-print' },
+              { step: '4', text: 'Run the forensic detector lanes', icon: 'eye' },
+              { step: '5', text: 'Anchor the verdict hash on Sepolia', icon: 'link' },
+              { step: '6', text: 'Accept, reject, or send to review', icon: 'clipboard' },
             ].map((item) => (
               <View key={item.step} style={styles.howStep}>
                 <View style={[styles.howStepNumber, { backgroundColor: Colors.primary[500] + '20' }]}>
