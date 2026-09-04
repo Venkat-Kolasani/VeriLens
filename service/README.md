@@ -75,6 +75,33 @@ curl -X POST "http://localhost:8000/v1/analyze/single?attested=true" \
 The per-image analysis is returned under the `selfie` field (`id_image` is
 `null`) — the response model is shared with `/v1/analyze`.
 
+### `POST /v1/baseline`
+
+Runs one image through the configured baseline detectors and through our judge,
+returning both side by side. This is the comparison the demo turns on: a
+commercial detector returns a single number with no region and no reasoning,
+while ours reports per-lane evidence and can abstain.
+
+```bash
+curl -X POST "http://localhost:8000/v1/baseline" -F "image=@selfie.jpg"
+```
+
+Baseline credentials are optional. Without `SIGHTENGINE_USER` /
+`SIGHTENGINE_SECRET` the baseline reports `available: false` with a reason and
+our own verdict is still returned.
+
+Before quoting the paper's numbers anywhere, re-measure them:
+
+```bash
+export SIGHTENGINE_USER=... SIGHTENGINE_SECRET=...
+python scripts/verify_baseline.py --data /path/to/inpainting-exchange -n 40
+```
+
+arXiv 2602.00192 Table 2 reports Sightengine and Hive both falling from ~91%
+to ~55% on INP-X exchanged images. That paper was submitted 2026-01-30, so the
+vendor has had months to patch a documented failure. The script prints
+accuracy per category and states whether the finding still reproduces.
+
 ### `GET /v1/health`
 
 ```bash
