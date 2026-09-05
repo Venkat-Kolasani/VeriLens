@@ -24,6 +24,7 @@ from baseline import run_all as run_baselines
 from config import CFG
 from judge import Verdict, judge
 from lane_a import lane_a_synthesis
+from lane_a_refine import refine_lane_a
 from lane_screen import lane_screen_replay
 from lane_face import face_similarity
 from lanes import lane_b_noise, lane_c_compression, load_image, quality_gate
@@ -120,7 +121,7 @@ def _analyze_one(data: bytes, *, check_screen_replay: bool = True):
 
     q = quality_gate(pil, bgr)
     results = [
-        lane_a_synthesis(bgr),
+        refine_lane_a(lane_a_synthesis(bgr), data, bgr),
         lane_b_noise(bgr),
         lane_c_compression(pil, bgr),
     ]
