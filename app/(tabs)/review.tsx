@@ -198,7 +198,7 @@ export default function ReviewScreen() {
         {/* Stats row */}
         <Animated.View entering={FadeIn.duration(500)} style={styles.statsRow}>
           {[
-            { label: 'Queued', value: queue.length, color: Colors.primary[500] },
+            { label: 'Queued', value: queue.length, color: colors.tint },
             { label: 'Pending', value: pendingCount, color: Colors.warning },
             { label: 'Actioned', value: queue.length - pendingCount, color: Colors.success },
           ].map((s) => (
@@ -240,7 +240,7 @@ export default function ReviewScreen() {
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary[500]} />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} />
           }
         />
       )}

@@ -19,20 +19,20 @@ export default function TabLayout() {
         headerShown: false,
         tabBarStyle: {
           position: 'absolute',
-          backgroundColor: isDark ? 'rgba(15, 23, 42, 0.92)' : 'rgba(255, 255, 255, 0.92)',
-          borderTopColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)',
+          backgroundColor: isDark ? 'rgba(10, 10, 10, 0.94)' : 'rgba(255, 255, 255, 0.92)',
+          borderTopColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
           borderTopWidth: StyleSheet.hairlineWidth,
           height: Platform.OS === 'ios' ? 92 : 72,
           paddingBottom: Platform.OS === 'ios' ? 28 : 12,
           paddingTop: 8,
           elevation: 24,
-          shadowColor: isDark ? '#000' : '#64748B',
+          shadowColor: isDark ? '#000' : '#8A8A8A',
           shadowOffset: { width: 0, height: -8 },
           shadowOpacity: isDark ? 0.4 : 0.1,
           shadowRadius: 16,
         },
         tabBarActiveTintColor: Colors.primary[500],
-        tabBarInactiveTintColor: isDark ? '#475569' : '#94A3B8',
+        tabBarInactiveTintColor: isDark ? '#5A5A5A' : '#8A8A8A',
         tabBarLabelStyle: {
           fontSize: 10,
           fontWeight: '600',
@@ -95,7 +95,7 @@ export default function TabLayout() {
             <View style={styles.captureWrapper}>
               <View style={[styles.captureOuterRing, focused && styles.captureOuterRingActive]}>
                 <LinearGradient
-                  colors={focused ? ['#3B82F6', '#6366F1', '#8B5CF6'] : (isDark ? ['#1E293B', '#334155'] : ['#E2E8F0', '#CBD5E1'])}
+                  colors={focused ? ['#FFD027', '#F5C400', '#CCA200'] : (isDark ? ['#1A1A1A', '#2A2A2A'] : ['#EDEDED', '#D8D8D8'])}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={styles.captureIconContainer}
@@ -103,7 +103,7 @@ export default function TabLayout() {
                   <Ionicons
                     name="camera"
                     size={26}
-                    color={focused ? '#FFFFFF' : (isDark ? '#94A3B8' : '#64748B')}
+                    color={focused ? '#0A0A0A' : (isDark ? '#8A8A8A' : '#6B6B6B')}
                   />
                 </LinearGradient>
               </View>
@@ -179,7 +179,7 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   captureOuterRingActive: {
-    borderColor: 'rgba(59, 130, 246, 0.25)',
+    borderColor: 'rgba(245, 196, 0, 0.35)',
   },
   captureIconContainer: {
     width: 58,
@@ -187,7 +187,7 @@ const styles = StyleSheet.create({
     borderRadius: 29,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#3B82F6',
+    shadowColor: '#F5C400',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.35,
     shadowRadius: 12,

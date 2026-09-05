@@ -35,7 +35,7 @@ export function verdictColor(value: AxisValue): string {
     case 'INDETERMINATE':
       return Colors.warning;
     default:
-      return '#94A3B8';
+      return '#8A8A8A';
   }
 }
 
@@ -158,7 +158,7 @@ export function VerdictAxes({
 // ──────────────── Per-lane explanation ────────────────
 
 const SEVERITY_COLOR: Record<VerdictReason['severity'], string> = {
-  info: '#94A3B8',
+  info: '#8A8A8A',
   warn: Colors.warning,
   critical: Colors.danger,
 };
@@ -182,13 +182,21 @@ export function VerdictReasons({
     );
   }
 
+  // E/J/Q reasons never appear in `lanes` (that list is only the per-image
+  // forensic lanes A/B/C) -- without this map they'd render as a bare
+  // letter instead of a readable name.
+  const NON_LANE_NAMES: Record<string, string> = {
+    E: 'Face Match',
+    J: 'Judge',
+    Q: 'Quality Gate',
+  };
   const laneName = (lane: string) =>
-    lanes?.find((l) => l.lane === lane)?.name ?? lane;
+    lanes?.find((l) => l.lane === lane)?.name ?? NON_LANE_NAMES[lane] ?? lane;
 
   return (
     <View style={styles.reasonList}>
       {reasons.map((reason, i) => {
-        const color = SEVERITY_COLOR[reason.severity] ?? '#94A3B8';
+        const color = SEVERITY_COLOR[reason.severity] ?? '#8A8A8A';
         return (
           <View key={`${reason.lane}-${i}`} style={styles.reasonRow}>
             <View style={[styles.reasonDot, { backgroundColor: color }]} />
@@ -251,7 +259,7 @@ export function LaneScores({ lanes }: { lanes: LaneOut[] | null }) {
                     ? lane.score > 0.5
                       ? Colors.danger
                       : Colors.success
-                    : '#94A3B8',
+                    : '#8A8A8A',
                 },
               ]}
             />

@@ -33,19 +33,24 @@ CORS is already wide open (`allow_origins=["*"]`), so no extra config is needed.
 
 ## Endpoints
 
-Uploads are `multipart/form-data`. `attested` is a **query parameter**, not a form
-field — it is declared as a plain `bool` on the handler, which FastAPI reads from
-the query string. Any single upload over **12 MB** returns `413`; an empty file
-returns `400`; an undecodable image returns `400`.
+Uploads are `multipart/form-data`. Any single upload over **12 MB** returns
+`413`; an empty file returns `400`; an undecodable image returns `400`.
+
+### `GET /v1/attest/nonce`
+
+Issues a single-use, 120-second nonce for Lane D capture attestation:
+`{"nonce": "<64 hex chars>", "expires_in": 120}`. See "Attestation" below.
 
 ### `POST /v1/analyze`
 
 Full KYC check. Two files: `id_image` and `selfie`. Authenticity is the **worst**
 of the two — a genuine selfie paired with a doctored ID still fails. Reasons are
-prefixed `[ID]` / `[Selfie]`. `attested` applies to the selfie only.
+prefixed `[ID]` / `[Selfie]`. Optional attestation form fields
+(`attestation_nonce`, `attestation_signature`, `attestation_public_key`) apply
+to the selfie only.
 
 ```bash
-curl -X POST "http://localhost:8000/v1/analyze?attested=false" \
+curl -X POST "http://localhost:8000/v1/analyze" \
   -F "id_image=@/path/to/id.jpg" \
   -F "selfie=@/path/to/selfie.jpg"
 ```
@@ -68,9 +73,14 @@ Authenticity only. One file: `image`. No identity axis — there is nothing to
 match against, so `identity` comes back `null` and `ACCEPT` is reachable.
 
 ```bash
-curl -X POST "http://localhost:8000/v1/analyze/single?attested=true" \
+curl -X POST "http://localhost:8000/v1/analyze/single" \
   -F "image=@/path/to/photo.jpg"
 ```
+
+To attach a verified attestation to either endpoint: fetch a nonce from
+`GET /v1/attest/nonce`, sign `bytes.fromhex(nonce) + bytes.fromhex(sha256(image))`
+with the device's Ed25519 key, and add `attestation_nonce`,
+`attestation_signature`, `attestation_public_key` as extra form fields.
 
 The per-image analysis is returned under the `selfie` field (`id_image` is
 `null`) — the response model is shared with `/v1/analyze`.
@@ -196,20 +206,21 @@ Four distinct conditions in `judge.py` produce it:
    in KYC a confidently wrong reject locks a real user out of their bank.
    `score` carries the aggregate.
 
-Attestation (`attested=true`) can only ever *raise* confidence, never lower it.
-Its **absence is never evidence of fakery** — almost every genuine photo on
-earth carries no attestation, so penalising its absence would fail real users
-en masse.
+Attestation can only ever *raise* confidence, never lower it. Its **absence is
+never evidence of fakery** — almost every genuine photo on earth carries no
+attestation, so penalising its absence would fail real users en masse.
 
-**It currently grants nothing.** The flag is asserted by the client and the
-service cannot verify it, so `config.trust_client_attestation` is `False` and
-`attested_bonus` (0.10) is not applied. A hostile client would simply send
-`attested=true`; honouring that would advertise an injection defence that does
-not exist. The claim is still reported in `reasons[]` so the gap is visible
-rather than silently dropped.
-
-To make it real, the service must issue a nonce that the device signs over the
-image bytes, and verify that signature. Then flip the flag.
+**It is cryptographically verified**, not client-asserted. `GET /v1/attest/nonce`
+issues a single-use, 120-second nonce. The device signs
+`bytes.fromhex(nonce) + bytes.fromhex(sha256(selfie))` with its Ed25519 key
+(`lib/crypto.ts`) and sends `attestation_nonce` / `attestation_signature` /
+`attestation_public_key` alongside the upload. `service/attestation.py` verifies
+the signature and consumes the nonce (single-use, even on failure) before
+`attested_bonus` (0.10) is applied. Missing or failed attestation fields are
+silent — no penalty, no reason logged — exactly like every unattested genuine
+photo. The nonce store is an in-memory dict, single-process only; see the
+`# ponytail:` comment in `service/attestation.py` for the multi-instance
+upgrade path (Redis/DB-backed store).
 
 ---
 
@@ -275,8 +286,9 @@ Straight from `known_limitations` in `/v1/model-card`:
   find when the whole frame was generated together.
 - No camera attribution and no PRNU reference database.
 - Absence of capture attestation is never treated as evidence of fakery.
-- The `attested` flag is client-asserted and NOT verified server-side, so it
-  grants no confidence bonus and is not yet an injection defence.
+- Capture attestation is verified via a single-use nonce and Ed25519 signature,
+  but the nonce store is in-memory and single-process — it does not survive a
+  restart or scale to multiple worker processes as-is.
 - Heavily compressed or low-resolution images return `INSUFFICIENT_EVIDENCE` by
   design rather than a guess.
 - Lane A (trained local-synthesis detector) is wired in but needs both
@@ -284,6 +296,13 @@ Straight from `known_limitations` in `/v1/model-card`:
   either it abstains with a reason and lanes B/C carry the verdict.
 - Lane E (face match) is wired in but its dependencies are optional. Without
   them installed, identity reports `INDETERMINATE` and the case goes to review.
+- Lane A's held-out accuracy is measured on the same curated CelebA-HQ/INP-X
+  distribution it trained on, which does not prove real-world generalisation —
+  manual testing against real phone photos found confident false positives and
+  a false negative. It now scans only the detected face region and its
+  confidence is capped (`CFG.lane_a_confidence_cap`) so it can't dominate the
+  judge; see HANDOFF.md §6 for what was found and why this didn't produce a
+  false ACCEPT in testing.
 
 And what it explicitly does **not** claim (`does_not_claim`):
 

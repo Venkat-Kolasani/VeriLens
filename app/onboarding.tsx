@@ -33,21 +33,21 @@ const pages = [
     title: 'Your Media,\nProven Real',
     description:
       'Every photo and video you capture gets a unique cryptographic fingerprint — proving it hasn\'t been tampered with.',
-    gradient: ['#1E3A8A', '#3B82F6'] as [string, string],
+    gradient: ['#161616', '#0A0A0A'] as [string, string],
   },
   {
     icon: 'link' as const,
     title: 'Blockchain\nAnchored',
     description:
       'Your media proof is permanently recorded on a decentralized blockchain. Immutable, transparent, and verifiable by anyone.',
-    gradient: ['#064E3B', '#10B981'] as [string, string],
+    gradient: ['#242424', '#0A0A0A'] as [string, string],
   },
   {
     icon: 'eye' as const,
     title: 'AI Verified\nAuthenticity',
     description:
       'Advanced AI analyzes your media for deepfakes, manipulation, and plagiarism. Get a trust score you can share.',
-    gradient: ['#4C1D95', '#8B5CF6'] as [string, string],
+    gradient: ['#1A1A1A', '#0A0A0A'] as [string, string],
   },
 ];
 
@@ -87,7 +87,7 @@ export default function OnboardingScreen() {
           entering={FadeInDown.delay(300 + index * 100).springify()}
           style={styles.iconContainer}
         >
-          <Ionicons name={item.icon} size={80} color="rgba(255,255,255,0.95)" />
+          <Ionicons name={item.icon} size={80} color="#F5C400" />
         </Animated.View>
 
         <Animated.Text
@@ -136,7 +136,7 @@ export default function OnboardingScreen() {
                 {
                   backgroundColor:
                     currentPage === index
-                      ? '#FFFFFF'
+                      ? '#F5C400'
                       : 'rgba(255,255,255,0.3)',
                   width: currentPage === index ? 24 : 8,
                 },
@@ -158,7 +158,7 @@ export default function OnboardingScreen() {
             >
               {isSettingUp ? (
                 <View style={styles.loadingRow}>
-                  <ActivityIndicator size="small" color="#1E3A8A" />
+                  <ActivityIndicator size="small" color="#0A0A0A" />
                   <Text style={styles.getStartedText}>  Generating Keys...</Text>
                 </View>
               ) : (
@@ -201,7 +201,7 @@ export default function OnboardingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0F172A',
+    backgroundColor: '#0A0A0A',
   },
   page: {
     flex: 1,
@@ -216,7 +216,7 @@ const styles = StyleSheet.create({
     width: 140,
     height: 140,
     borderRadius: 70,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(245,196,0,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 40,
@@ -254,7 +254,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   getStartedButton: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F5C400',
     paddingHorizontal: 48,
     paddingVertical: 16,
     borderRadius: 30,
@@ -262,7 +262,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   getStartedText: {
-    color: '#1E3A8A',
+    color: '#0A0A0A',
     fontSize: 18,
     fontWeight: '700',
   },

@@ -53,7 +53,7 @@ export default function HomeScreen() {
       <ScrollView
         contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 12 }]}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary[500]} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} />
         }
         showsVerticalScrollIndicator={false}
       >
@@ -68,20 +68,20 @@ export default function HomeScreen() {
           </View>
           <Pressable
             style={[styles.keyPill, {
-              backgroundColor: isDark ? 'rgba(59, 130, 246, 0.08)' : 'rgba(59, 130, 246, 0.06)',
-              borderColor: isDark ? 'rgba(59, 130, 246, 0.2)' : 'rgba(59, 130, 246, 0.15)',
+              backgroundColor: isDark ? 'rgba(245, 196, 0, 0.08)' : 'rgba(153, 122, 0, 0.06)',
+              borderColor: isDark ? 'rgba(245, 196, 0, 0.2)' : 'rgba(153, 122, 0, 0.15)',
             }]}
           >
             <View style={[styles.keyDot, { backgroundColor: Colors.success }]} />
-            <Ionicons name="key" size={13} color={Colors.primary[500]} />
-            <Text style={[styles.keyPillText, { color: Colors.primary[500] }]}>Keys Active</Text>
+            <Ionicons name="key" size={13} color={colors.tint} />
+            <Text style={[styles.keyPillText, { color: colors.tint }]}>Keys Active</Text>
           </Pressable>
         </Animated.View>
 
         {/* Stats Cards */}
         <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.statsRow}>
           {[
-            { n: stats.total, label: 'Cases', colors: isDark ? ['#1E3A8A', '#1D4ED8'] : ['#3B82F6', '#2563EB'], icon: 'documents' },
+            { n: stats.total, label: 'Cases', colors: ['#242424', '#0A0A0A'], icon: 'documents' },
             { n: stats.accepted, label: 'Accepted', colors: isDark ? ['#064E3B', '#047857'] : ['#10B981', '#059669'], icon: 'shield-checkmark' },
             { n: stats.review, label: 'In Review', colors: isDark ? ['#78350F', '#B45309'] : ['#F59E0B', '#D97706'], icon: 'alert-circle' },
           ].map((stat, i) => (
@@ -106,13 +106,13 @@ export default function HomeScreen() {
             style={({ pressed }) => [{ opacity: pressed ? 0.92 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] }]}
           >
             <LinearGradient
-              colors={['#3B82F6', '#6366F1', '#8B5CF6']}
+              colors={['#242424', '#0A0A0A']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={styles.captureButton}
             >
-              <View style={styles.captureIconBg}>
-                <Ionicons name="camera" size={22} color="#FFFFFF" />
+              <View style={[styles.captureIconBg, { backgroundColor: 'rgba(245,196,0,0.18)' }]}>
+                <Ionicons name="camera" size={22} color="#F5C400" />
               </View>
               <View style={styles.captureTextContainer}>
                 <Text style={styles.captureButtonText}>New KYC Check</Text>
@@ -152,7 +152,7 @@ export default function HomeScreen() {
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Recent Cases</Text>
             {cases.length > 5 && (
               <Pressable onPress={() => router.push('/(tabs)/gallery')}>
-                <Text style={[styles.seeAll, { color: Colors.primary[500] }]}>See All</Text>
+                <Text style={[styles.seeAll, { color: colors.tint }]}>See All</Text>
               </Pressable>
             )}
           </View>
@@ -162,8 +162,8 @@ export default function HomeScreen() {
               backgroundColor: isDark ? Colors.dark.card : Colors.light.card,
               borderColor: isDark ? Colors.dark.border : Colors.light.border,
             }]}>
-              <View style={[styles.emptyIconCircle, { backgroundColor: isDark ? 'rgba(59,130,246,0.1)' : 'rgba(59,130,246,0.06)' }]}>
-                <Ionicons name="images-outline" size={32} color={Colors.primary[400]} />
+              <View style={[styles.emptyIconCircle, { backgroundColor: isDark ? 'rgba(245,196,0,0.1)' : 'rgba(153,122,0,0.06)' }]}>
+                <Ionicons name="images-outline" size={32} color={colors.tint} />
               </View>
               <Text style={[styles.emptyText, { color: colors.text }]}>No KYC cases yet</Text>
               <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>
@@ -186,8 +186,8 @@ export default function HomeScreen() {
             borderColor: isDark ? Colors.dark.border : Colors.light.border,
           }]}>
             <View style={styles.infoRow}>
-              <View style={[styles.infoIconCircle, { backgroundColor: isDark ? 'rgba(59,130,246,0.12)' : 'rgba(59,130,246,0.08)' }]}>
-                <Ionicons name="finger-print" size={18} color={Colors.primary[500]} />
+              <View style={[styles.infoIconCircle, { backgroundColor: isDark ? 'rgba(245,196,0,0.12)' : 'rgba(153,122,0,0.08)' }]}>
+                <Ionicons name="finger-print" size={18} color={colors.tint} />
               </View>
               <View style={styles.infoTextContainer}>
                 <Text style={[styles.infoTitle, { color: colors.text }]}>Your Device Key</Text>
@@ -251,7 +251,7 @@ const styles = StyleSheet.create({
     padding: 18,
     borderRadius: 18,
     marginBottom: 10,
-    shadowColor: '#3B82F6',
+    shadowColor: '#F5C400',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
     shadowRadius: 12,

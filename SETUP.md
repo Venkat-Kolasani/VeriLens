@@ -184,6 +184,14 @@ itself:
 ipconfig getifaddr en0
 ```
 
+**On an Android Studio emulator, use `http://10.0.2.2:8000`, not
+`localhost` and not your LAN IP.** The emulator runs in its own network
+namespace; `10.0.2.2` is the special alias Android's emulated network maps
+back to the host machine's `localhost`. (This is unrelated to and different
+from the physical-phone LAN-IP case above — the emulator is not on your LAN.)
+Rebuild/restart `expo start` after changing `.env`, since `EXPO_PUBLIC_*`
+values are inlined at build time, not read live.
+
 No model weights or API keys are needed. Lanes B and C are training-free.
 
 ### Optional extras

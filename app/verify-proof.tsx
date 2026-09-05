@@ -22,6 +22,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Clipboard from 'expo-clipboard';
 
 import { Colors } from '@/constants/Colors';
+import { Fonts } from '@/constants/theme';
 import { BLOCK_EXPLORER, CHAIN_FAUCET } from '@/constants/config';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import {
@@ -291,12 +292,12 @@ export default function VerifyProofScreen() {
                 <Ionicons
                   name={m.icon as any}
                   size={14}
-                  color={mode === m.key ? '#FFF' : colors.textSecondary}
+                  color={mode === m.key ? '#0A0A0A' : colors.textSecondary}
                 />
                 <Text
                   style={[
                     styles.modeTabText,
-                    { color: mode === m.key ? '#FFF' : colors.textSecondary },
+                    { color: mode === m.key ? '#0A0A0A' : colors.textSecondary },
                   ]}
                 >
                   {m.label}
@@ -343,7 +344,7 @@ export default function VerifyProofScreen() {
                       onPress={() => pasteFromClipboard('tx')}
                       style={[styles.pasteBtn, { backgroundColor: isDark ? Colors.dark.elevated : Colors.light.elevated }]}
                     >
-                      <Ionicons name="clipboard-outline" size={18} color={Colors.primary[500]} />
+                      <Ionicons name="clipboard-outline" size={18} color={colors.tint} />
                     </Pressable>
                   </View>
                   <Text style={[styles.inputHint, { color: colors.textSecondary }]}>
@@ -396,7 +397,7 @@ export default function VerifyProofScreen() {
                       onPress={() => pasteFromClipboard('hash')}
                       style={[styles.pasteBtn, { backgroundColor: isDark ? Colors.dark.elevated : Colors.light.elevated }]}
                     >
-                      <Ionicons name="clipboard-outline" size={18} color={Colors.primary[500]} />
+                      <Ionicons name="clipboard-outline" size={18} color={colors.tint} />
                     </Pressable>
                   </View>
                 </>
@@ -419,7 +420,7 @@ export default function VerifyProofScreen() {
                         },
                       ]}
                     >
-                      <Ionicons name="images-outline" size={24} color={Colors.primary[500]} />
+                      <Ionicons name="images-outline" size={24} color={colors.tint} />
                       <Text style={[styles.imagePickText, { color: colors.text }]}>Gallery</Text>
                     </Pressable>
                     <Pressable
@@ -432,7 +433,7 @@ export default function VerifyProofScreen() {
                         },
                       ]}
                     >
-                      <Ionicons name="camera-outline" size={24} color={Colors.primary[500]} />
+                      <Ionicons name="camera-outline" size={24} color={colors.tint} />
                       <Text style={[styles.imagePickText, { color: colors.text }]}>Camera</Text>
                     </Pressable>
                   </View>
@@ -460,7 +461,7 @@ export default function VerifyProofScreen() {
               style={({ pressed }) => [{ opacity: pressed ? 0.9 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] }]}
             >
               <LinearGradient
-                colors={isVerifying ? ['#64748B', '#64748B'] : ['#3B82F6', '#8B5CF6']}
+                colors={isVerifying ? ['#3A3A3A', '#3A3A3A'] : ['#242424', '#0A0A0A']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={styles.verifyBtn}
@@ -614,11 +615,11 @@ export default function VerifyProofScreen() {
                     }
                     style={[styles.explorerLink, { backgroundColor: isDark ? Colors.dark.elevated : Colors.light.elevated }]}
                   >
-                    <Ionicons name="globe-outline" size={16} color={Colors.primary[500]} />
-                    <Text style={[styles.explorerLinkText, { color: Colors.primary[500] }]}>
+                    <Ionicons name="globe-outline" size={16} color={colors.tint} />
+                    <Text style={[styles.explorerLinkText, { color: colors.tint }]}>
                       View on Sepolia Explorer
                     </Text>
-                    <Ionicons name="open-outline" size={14} color={Colors.primary[500]} />
+                    <Ionicons name="open-outline" size={14} color={colors.tint} />
                   </Pressable>
                 </ResultCard>
               )}
@@ -707,11 +708,11 @@ export default function VerifyProofScreen() {
                       onPress={() => Linking.openURL(result.cloudCase!.id_image_url!)}
                       style={[styles.explorerLink, { backgroundColor: isDark ? Colors.dark.elevated : Colors.light.elevated }]}
                     >
-                      <Ionicons name="image-outline" size={16} color={Colors.primary[500]} />
-                      <Text style={[styles.explorerLinkText, { color: Colors.primary[500] }]}>
+                      <Ionicons name="image-outline" size={16} color={colors.tint} />
+                      <Text style={[styles.explorerLinkText, { color: colors.tint }]}>
                         View ID Document
                       </Text>
-                      <Ionicons name="open-outline" size={14} color={Colors.primary[500]} />
+                      <Ionicons name="open-outline" size={14} color={colors.tint} />
                     </Pressable>
                   )}
                   {result.cloudCase.selfie_url && (
@@ -719,11 +720,11 @@ export default function VerifyProofScreen() {
                       onPress={() => Linking.openURL(result.cloudCase!.selfie_url!)}
                       style={[styles.explorerLink, { backgroundColor: isDark ? Colors.dark.elevated : Colors.light.elevated }]}
                     >
-                      <Ionicons name="person-outline" size={16} color={Colors.primary[500]} />
-                      <Text style={[styles.explorerLinkText, { color: Colors.primary[500] }]}>
+                      <Ionicons name="person-outline" size={16} color={colors.tint} />
+                      <Text style={[styles.explorerLinkText, { color: colors.tint }]}>
                         View Selfie
                       </Text>
-                      <Ionicons name="open-outline" size={14} color={Colors.primary[500]} />
+                      <Ionicons name="open-outline" size={14} color={colors.tint} />
                     </Pressable>
                   )}
                 </ResultCard>
@@ -766,7 +767,7 @@ function ResultCard({
       ]}
     >
       <View style={styles.resultCardHeader}>
-        <Ionicons name={icon as any} size={16} color={Colors.primary[500]} />
+        <Ionicons name={icon as any} size={16} color={colors.tint} />
         <Text style={[styles.resultCardTitle, { color: colors.text }]}>{title}</Text>
       </View>
       {children}
@@ -793,7 +794,13 @@ function ResultRow({
     <View style={styles.resultRow}>
       <Text style={[styles.resultLabel, { color: colors.textSecondary }]}>{label}</Text>
       <View style={styles.resultValueRow}>
-        <Text style={[styles.resultValue, { color: colors.text }]} numberOfLines={1} selectable>
+        {/* Copiable rows are raw forensic data (hashes, addresses, keys) —
+            render those in the mono font so they read as data, not prose. */}
+        <Text
+          style={[styles.resultValue, { color: colors.text }, copiable && { fontFamily: Fonts?.mono }]}
+          numberOfLines={1}
+          selectable
+        >
           {value}
         </Text>
         {copiable && onCopy && (
@@ -902,7 +909,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 16,
     marginBottom: 20,
-    shadowColor: '#3B82F6',
+    shadowColor: '#F5C400',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.25,
     shadowRadius: 10,

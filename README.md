@@ -415,8 +415,9 @@ Full detail, curl examples and thresholds: [service/README.md](service/README.md
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/v1/analyze` | Full KYC check — `id_image` + `selfie` (multipart), `?attested=` |
+| `POST` | `/v1/analyze` | Full KYC check — `id_image` + `selfie` (multipart), optional attestation fields |
 | `POST` | `/v1/analyze/single` | One image, authenticity only |
+| `GET` | `/v1/attest/nonce` | Issue a single-use nonce for Lane D capture attestation |
 | `GET` | `/v1/health` | Health check |
 | `GET` | `/v1/model-card` | Thresholds, calibration status, known limitations |
 
@@ -495,9 +496,7 @@ Any modification to a file changes its SHA-256 hash → **broken chain of trust*
 
 ---
 
-## 📄 License
 
-MIT — Built for **HackSRM Hackathon**.
 
 ---
 

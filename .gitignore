@@ -62,6 +62,9 @@ service/data/
 # kaggle job scaffolding (generated) + api token
 service/kaggle_job/
 service/kaggle_train/
+
+# real personal photos used for manual backend testing (PII, never committed)
+photos/
 .kaggle/
 
 # pitch deck build artifacts (icons, intermediate renders); keep the deck + script + handoff doc

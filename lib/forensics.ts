@@ -69,6 +69,33 @@ function filePart(uri: string, name: string) {
   return { uri, name: `${name}.${ext === 'png' ? 'png' : 'jpg'}`, type } as any;
 }
 
+/** Lane D capture attestation for one image (currently only ever the
+ *  selfie — the ID image is never attested). Absent/null means "not
+ *  attempted"; the service treats that as unattested, never as a penalty. */
+export interface Attestation {
+  nonce: string;
+  signature: string;
+  publicKey: string;
+}
+
+function appendAttestation(form: FormData, attestation: Attestation | null | undefined) {
+  if (!attestation) return;
+  form.append('attestation_nonce', attestation.nonce);
+  form.append('attestation_signature', attestation.signature);
+  form.append('attestation_public_key', attestation.publicKey);
+}
+
+/** GET a single-use nonce to sign for capture attestation. Expires 120s
+ *  after issue (server-enforced) — fetch it right before signing. */
+export async function fetchAttestationNonce(): Promise<{ nonce: string; expiresIn: number }> {
+  const res = await fetch(`${API_BASE_URL}/v1/attest/nonce`);
+  if (!res.ok) {
+    throw new ForensicsUnavailable(`Nonce request returned ${res.status}`);
+  }
+  const body = await res.json();
+  return { nonce: body.nonce, expiresIn: body.expires_in };
+}
+
 async function post(path: string, body: FormData): Promise<AnalyzeResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -94,26 +121,30 @@ async function post(path: string, body: FormData): Promise<AnalyzeResult> {
   }
 }
 
-/** Full KYC check. Authenticity is the worst of the two images. */
+/** Full KYC check. Authenticity is the worst of the two images.
+ *  `attestation`, when present, attests the SELFIE only — the ID image is
+ *  never attested. */
 export async function analyzeKycPair(
   idImageUri: string,
   selfieUri: string,
-  attested: boolean
+  attestation?: Attestation | null
 ): Promise<AnalyzeResult> {
   const form = new FormData();
   form.append('id_image', filePart(idImageUri, 'id'));
   form.append('selfie', filePart(selfieUri, 'selfie'));
-  return post(`/v1/analyze?attested=${attested}`, form);
+  appendAttestation(form, attestation);
+  return post('/v1/analyze', form);
 }
 
 /** Single image, authenticity only. No identity axis to report. */
 export async function analyzeSingle(
   imageUri: string,
-  attested: boolean
+  attestation?: Attestation | null
 ): Promise<AnalyzeResult> {
   const form = new FormData();
   form.append('image', filePart(imageUri, 'image'));
-  return post(`/v1/analyze/single?attested=${attested}`, form);
+  appendAttestation(form, attestation);
+  return post('/v1/analyze/single', form);
 }
 
 export async function serviceHealthy(): Promise<boolean> {

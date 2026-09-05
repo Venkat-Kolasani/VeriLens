@@ -76,9 +76,9 @@ export default function GalleryScreen() {
               {filtered.length} {filter === 'all' ? 'total' : filter.toLowerCase()} cases
             </Text>
           </View>
-          <View style={[styles.countBadge, { backgroundColor: isDark ? 'rgba(59,130,246,0.1)' : 'rgba(59,130,246,0.06)' }]}>
-            <Ionicons name="images" size={16} color={Colors.primary[500]} />
-            <Text style={[styles.countText, { color: Colors.primary[500] }]}>{cases.length}</Text>
+          <View style={[styles.countBadge, { backgroundColor: isDark ? 'rgba(245,196,0,0.1)' : 'rgba(153,122,0,0.06)' }]}>
+            <Ionicons name="images" size={16} color={colors.tint} />
+            <Text style={[styles.countText, { color: colors.tint }]}>{cases.length}</Text>
           </View>
         </View>
       </View>
@@ -110,13 +110,13 @@ export default function GalleryScreen() {
               <Ionicons
                 name={f.icon as any}
                 size={14}
-                color={isActive ? '#FFFFFF' : colors.textSecondary}
+                color={isActive ? '#0A0A0A' : colors.textSecondary}
               />
               <Text
                 style={[
                   styles.filterText,
                   {
-                    color: isActive ? '#FFFFFF' : colors.textSecondary,
+                    color: isActive ? '#0A0A0A' : colors.textSecondary,
                   },
                 ]}
               >
@@ -130,8 +130,8 @@ export default function GalleryScreen() {
       {/* Grid */}
       {filtered.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <View style={[styles.emptyIconCircle, { backgroundColor: isDark ? 'rgba(59,130,246,0.08)' : 'rgba(59,130,246,0.05)' }]}>
-            <Ionicons name="images-outline" size={40} color={Colors.primary[400]} />
+          <View style={[styles.emptyIconCircle, { backgroundColor: isDark ? 'rgba(245,196,0,0.08)' : 'rgba(153,122,0,0.05)' }]}>
+            <Ionicons name="images-outline" size={40} color={colors.tint} />
           </View>
           <Text style={[styles.emptyText, { color: colors.text }]}>
             {filter === 'all' ? 'No KYC cases yet' : `No ${filter.toLowerCase()} cases`}
@@ -150,7 +150,7 @@ export default function GalleryScreen() {
           contentContainerStyle={styles.gridContent}
           showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary[500]} />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.tint} />
           }
         />
       )}

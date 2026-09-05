@@ -15,10 +15,11 @@ from __future__ import annotations
 
 from dataclasses import asdict
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from attestation import issue_nonce, verify_attestation
 from baseline import run_all as run_baselines
 from config import CFG
 from judge import Verdict, judge
@@ -130,14 +131,41 @@ def _analyze_one(data: bytes):
             for r in results
         ],
     )
-    return analysis, q, results, bgr
+    return analysis, q, results, bgr, pil
+
+
+def _check_attestation(
+    subject_sha256: str,
+    attestation_nonce: str | None,
+    attestation_signature: str | None,
+    attestation_public_key: str | None,
+) -> bool:
+    if not (attestation_nonce and attestation_signature and attestation_public_key):
+        return False
+    ok, _reason = verify_attestation(
+        attestation_nonce, attestation_signature, attestation_public_key, subject_sha256
+    )
+    return ok
+
+
+@app.get("/v1/attest/nonce")
+def attest_nonce():
+    return issue_nonce()
 
 
 @app.post("/v1/analyze/single", response_model=AnalyzeOut)
-async def analyze_single(image: UploadFile = File(...), attested: bool = False):
+async def analyze_single(
+    image: UploadFile = File(...),
+    attestation_nonce: str | None = Form(None),
+    attestation_signature: str | None = Form(None),
+    attestation_public_key: str | None = Form(None),
+):
     """Authenticity only. No identity axis - there is nothing to match against."""
-    analysis, q, results, _ = _analyze_one(await _read_upload(image))
-    v = judge(q, results, attested=attested)
+    analysis, q, results, _, _ = _analyze_one(await _read_upload(image))
+    verified = _check_attestation(
+        analysis.sha256, attestation_nonce, attestation_signature, attestation_public_key
+    )
+    v = judge(q, results, attested=verified)
     return AnalyzeOut(version=CFG.version, verdict=_verdict_out(v), selfie=analysis)
 
 
@@ -145,33 +173,43 @@ async def analyze_single(image: UploadFile = File(...), attested: bool = False):
 async def analyze(
     id_image: UploadFile = File(...),
     selfie: UploadFile = File(...),
-    attested: bool = False,
+    attestation_nonce: str | None = Form(None),
+    attestation_signature: str | None = Form(None),
+    attestation_public_key: str | None = Form(None),
 ):
     """Full KYC check: both images, worst-case authenticity, identity axis.
 
     Authenticity takes the WORST of the two images: a genuine selfie paired
     with a doctored ID document is still a failed check.
+
+    Attestation is always over the selfie — it's the image injection defence
+    cares about (an ID document photo is not live-captured by the user).
     """
-    id_analysis, id_q, id_results, id_bgr = _analyze_one(await _read_upload(id_image))
-    selfie_analysis, s_q, s_results, s_bgr = _analyze_one(await _read_upload(selfie))
+    id_analysis, id_q, id_results, id_bgr, _ = _analyze_one(await _read_upload(id_image))
+    selfie_analysis, s_q, s_results, s_bgr, _ = _analyze_one(await _read_upload(selfie))
+    verified = _check_attestation(
+        selfie_analysis.sha256, attestation_nonce, attestation_signature, attestation_public_key
+    )
 
     # Authenticity: judge each image on its own, then keep the worse one.
     # A genuine selfie paired with a doctored ID is still a failed check.
     rank = {"LIKELY_FAKE": 0, "INSUFFICIENT_EVIDENCE": 1, "REAL": 2}
     id_v = judge(id_q, id_results, attested=False)
-    selfie_v = judge(s_q, s_results, attested=attested)
+    selfie_v = judge(s_q, s_results, attested=verified)
     worse_is_id = rank[id_v.authenticity] < rank[selfie_v.authenticity]
 
     # Identity is orthogonal, so it is resolved once over both images and
     # then folded into the decision by the judge.
-    sim, face_reasons = face_similarity(id_bgr, s_bgr)
+    sim, face_reasons, low_quality_face = face_similarity(id_bgr, s_bgr)
 
     # Re-judge the worse image with the identity signal attached, so the
     # decision reflects both axes rather than being patched afterwards.
     if worse_is_id:
-        final = judge(id_q, id_results, attested=False, face_similarity=sim, require_identity=True)
+        final = judge(id_q, id_results, attested=False, face_similarity=sim,
+                       require_identity=True, low_quality_face=low_quality_face)
     else:
-        final = judge(s_q, s_results, attested=attested, face_similarity=sim, require_identity=True)
+        final = judge(s_q, s_results, attested=verified, face_similarity=sim,
+                       require_identity=True, low_quality_face=low_quality_face)
 
     Reason = type(final.reasons[0]) if final.reasons else None
     labelled = (
@@ -203,7 +241,7 @@ async def baseline(image: UploadFile = File(...)):
     Ours reports per-lane evidence and abstains when it cannot read the image.
     """
     data = await _read_upload(image)
-    analysis, q, results, _ = _analyze_one(data)
+    analysis, q, results, _, _ = _analyze_one(data)
     ours = judge(q, results)
     baselines = await run_baselines(data, image.filename or "upload.jpg")
 
@@ -281,10 +319,12 @@ def model_card():
             "image with globally uniform statistics can pass both.",
             "No camera attribution and no PRNU reference database.",
             "Absence of capture attestation is never treated as evidence of fakery.",
-            "The `attested` flag is asserted by the client and is NOT verified "
-            "server-side, so it currently grants no confidence bonus. It is not an "
-            "injection defence until the service issues a nonce the device must "
-            "sign over the image bytes (config.trust_client_attestation).",
+            "Capture attestation is verified server-side: the client requests a "
+            "single-use nonce (120s TTL) from /v1/attest/nonce, Ed25519-signs it "
+            "together with the subject image's sha256 using its on-device key, and "
+            "the service verifies that signature before granting any confidence "
+            "bonus. The nonce store is in-memory and single-process, not a "
+            "distributed store.",
             "Heavily compressed or low-resolution images return "
             "INSUFFICIENT_EVIDENCE by design rather than a guess.",
             "Lane A (trained local-synthesis detector) is wired in but needs both "
@@ -294,6 +334,28 @@ def model_card():
             "Without requirements-ml.txt installed no similarity is computed, so "
             "a pair check reports identity=INDETERMINATE and routes to REVIEW "
             "rather than accepting an unverified identity.",
+            "A face crop below the recognition model's native 112px input "
+            "resolution (lane_face.LOW_QUALITY_FACE_PX) - a common case for a "
+            "low-res ID-document photo - still gets an honest similarity score, "
+            "but must clear face_match_above by an extra "
+            "face_match_low_quality_margin before counting as a confident MATCH; "
+            "otherwise it routes to INDETERMINATE rather than accepting a weak "
+            "signal.",
+            "Lane A's val_acc_exchanged is measured on a held-out split of the "
+            "SAME narrow, curated CelebA-HQ/INP-X distribution it trained on - "
+            "manual testing against real photos outside that distribution found "
+            "confident false positives (>0.95 on genuine photos) AND a confident "
+            "false negative (missed an actual AI-generated photo). Lane A now "
+            "restricts scanning to the detected face region (matches how it was "
+            "trained; falls back to the full frame if no face detector is "
+            "available) and its confidence weight is capped "
+            "(CFG.lane_a_confidence_cap) so it cannot dominate the judge until "
+            "it's validated on a genuinely out-of-distribution test set. This "
+            "did not produce a single false ACCEPT in testing - the "
+            "min_usable_lanes and lane-disagreement gates correctly routed "
+            "every affected case to REVIEW instead - but it does mean higher "
+            "REVIEW rates on real users until Lane A is retrained on a broader "
+            "dataset.",
         ],
         "does_not_claim": [
             "Novel research. The techniques (ELA, noise residuals, robust "

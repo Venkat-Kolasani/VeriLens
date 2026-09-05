@@ -26,6 +26,19 @@ class Config:
     # saturating area->score curve. Uncalibrated default.
     score_area_saturation: float = 0.05
 
+    # Lane A's checkpoint reports val_acc_exchanged from ITS OWN held-out
+    # split of the same narrow, curated CelebA-HQ/INP-X distribution it was
+    # trained on -- a high number there proves the model fits that
+    # distribution, not that it generalises to real-world phone photos.
+    # Manual testing against real photos outside that distribution (not
+    # CelebA-HQ-style headshots) found confident false positives (>0.95 on
+    # genuine photos) AND a confident false negative (an actual AI-generated
+    # photo scored as safe). Capping the weight this lane can carry in the
+    # judge's weighted average until it's validated against a genuinely
+    # out-of-distribution test set -- raise this only after that validation
+    # exists, not by trusting a bigger same-distribution val_acc_exchanged.
+    lane_a_confidence_cap: float = 0.5
+
     # ---- judge ----
     # Gap between these two is the abstention band. Deliberately wide: in KYC
     # a confidently wrong reject locks a real user out of their bank.
@@ -34,17 +47,18 @@ class Config:
     min_usable_lanes: int = 2  # fewer than this and there is nothing to cross-check
     max_disagreement: float = 0.28  # spread above which lanes conflict -> abstain
     attested_bonus: float = 0.10  # attestation RAISES confidence only, never lowers
-    # The `attested` flag is currently ASSERTED BY THE CLIENT and is not
-    # cryptographically verified server-side. A hostile client can simply
-    # send attested=true, so honouring it would claim an injection defence
-    # that does not exist. Left off until the service issues a nonce that
-    # the device must sign over the image bytes; then flip this to True.
-    trust_client_attestation: bool = False
 
     # Cosine similarity on face embeddings (Lane E). Gap between them is the
     # inconclusive band -> REVIEW rather than a coin-flip identity call.
     face_match_above: float = 0.38
     face_mismatch_below: float = 0.22
+    # A face crop smaller than the recognition model's own input resolution
+    # (112px, see lane_face.LOW_QUALITY_FACE_PX) is upsampled internally,
+    # degrading the embedding it produces. A barely-over-threshold MATCH off
+    # a crop that small (e.g. a low-res ID photo) is a weaker signal than the
+    # same score off a full-resolution face, so it must clear a higher bar
+    # before being called a MATCH rather than INDETERMINATE.
+    face_match_low_quality_margin: float = 0.15
 
     ela_quality: int = 90  # recompression quality for Lane C
     max_analysis_side: int = 1600  # cap for CPU latency on free hosting

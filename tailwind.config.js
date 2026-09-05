@@ -9,25 +9,27 @@ module.exports = {
   theme: {
     extend: {
       colors: {
+        // Kept in sync with constants/Colors.ts — one yellow-on-near-black
+        // identity, not the generic-template blue/slate.
         primary: {
-          50: '#EFF6FF',
-          100: '#DBEAFE',
-          200: '#BFDBFE',
-          300: '#93C5FD',
-          400: '#60A5FA',
-          500: '#3B82F6',
-          600: '#2563EB',
-          700: '#1D4ED8',
-          800: '#1E40AF',
-          900: '#1E3A8A',
+          50: '#FFFDF2',
+          100: '#FFF7CC',
+          200: '#FFEB99',
+          300: '#FFDD5C',
+          400: '#FFD027',
+          500: '#F5C400',
+          600: '#CCA200',
+          700: '#997A00',
+          800: '#665200',
+          900: '#332900',
         },
         surface: {
-          dark: '#0F172A',
-          darkCard: '#1E293B',
-          darkElevated: '#334155',
-          light: '#F8FAFC',
+          dark: '#0A0A0A',
+          darkCard: '#161616',
+          darkElevated: '#242424',
+          light: '#FAFAFA',
           lightCard: '#FFFFFF',
-          lightElevated: '#F1F5F9',
+          lightElevated: '#F0F0F0',
         },
         success: '#10B981',
         danger: '#EF4444',

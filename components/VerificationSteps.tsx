@@ -44,7 +44,7 @@ export function VerificationSteps({ steps }: VerificationStepsProps) {
                     : step.status === 'error'
                     ? Colors.danger + '15'
                     : step.status === 'running'
-                    ? Colors.primary[500] + '15'
+                    ? colors.tint + '15'
                     : 'transparent',
               },
             ]}
@@ -53,7 +53,7 @@ export function VerificationSteps({ steps }: VerificationStepsProps) {
               <View style={[styles.waitingDot, { backgroundColor: colors.textSecondary }]} />
             )}
             {step.status === 'running' && (
-              <ActivityIndicator size="small" color={Colors.primary[500]} />
+              <ActivityIndicator size="small" color={colors.tint} />
             )}
             {step.status === 'success' && (
               <Ionicons name="checkmark-circle" size={22} color={Colors.success} />

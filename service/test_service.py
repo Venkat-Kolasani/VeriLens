@@ -4,12 +4,15 @@ Uses synthetic images so there are no fixtures to ship and the assertions
 are deterministic.
 """
 
+import hashlib
 import io
 
 import cv2
+import nacl.signing
 import numpy as np
 from PIL import Image
 
+from attestation import issue_nonce, verify_attestation
 from config import CFG
 from judge import judge
 from lanes import (
@@ -159,6 +162,38 @@ def test_identity_axis_independent():
     print("ok  identity axis is independent of authenticity")
 
 
+def test_low_quality_face_needs_wider_match_margin():
+    """A similarity that clears face_match_above off a low-res crop (e.g. a
+    small ID-document photo) must NOT be treated as confidently as the same
+    score off a full-resolution face -- it needs face_match_low_quality_margin
+    of extra headroom, else INDETERMINATE (never a silent downgrade to
+    MISMATCH -- an unreliable signal is unknown, not evidence of the negative).
+    """
+    from lanes import LaneResult
+
+    pil, bgr = load_image(_jpeg_bytes(_textured(512, 512)))
+    q = quality_gate(pil, bgr)
+    lanes = [
+        LaneResult("B", "Noise residual", 0.05, 0.8),
+        LaneResult("C", "Compression / ELA", 0.10, 0.8),
+    ]
+    marginal_sim = CFG.face_match_above + 0.02  # clears the normal bar...
+    assert marginal_sim < CFG.face_match_above + CFG.face_match_low_quality_margin  # ...not the wide one
+
+    v_normal = judge(q, lanes, face_similarity=marginal_sim, low_quality_face=False)
+    assert v_normal.identity == "MATCH", v_normal.identity
+
+    v_low_quality = judge(q, lanes, face_similarity=marginal_sim, low_quality_face=True)
+    assert v_low_quality.identity == "INDETERMINATE", v_low_quality.identity
+
+    # comfortably above even the widened bar: low-res crop shouldn't matter
+    strong_sim = CFG.face_match_above + CFG.face_match_low_quality_margin + 0.05
+    v_strong = judge(q, lanes, face_similarity=strong_sim, low_quality_face=True)
+    assert v_strong.identity == "MATCH", v_strong.identity
+    print("ok  low-quality face crop needs a wider match margin")
+
+
+
 def test_pair_without_face_match_never_accepts():
     """A KYC pair check that cannot verify the face must not ACCEPT.
 
@@ -183,26 +218,125 @@ def test_pair_without_face_match_never_accepts():
     print("ok  pair without face match routes to REVIEW")
 
 
-def test_unverified_attestation_grants_nothing():
-    """A claim the server cannot check must not buy confidence.
+def test_attestation_verifies_valid_signature():
+    """A correctly signed nonce+subject-hash must verify."""
+    subject_sha256 = hashlib.sha256(b"some image bytes").hexdigest()
+    n = issue_nonce()
+    key = nacl.signing.SigningKey.generate()
+    message = bytes.fromhex(n["nonce"]) + bytes.fromhex(subject_sha256)
+    sig = key.sign(message).signature.hex()
+    pub = key.verify_key.encode().hex()
 
-    Honouring a client-asserted flag would advertise an injection defence
-    that does not exist: a hostile client just sends attested=true.
+    ok, reason = verify_attestation(n["nonce"], sig, pub, subject_sha256)
+    assert ok, reason
+    print("ok  valid attestation verifies")
+
+
+def test_attestation_nonce_is_single_use():
+    subject_sha256 = hashlib.sha256(b"some image bytes").hexdigest()
+    n = issue_nonce()
+    key = nacl.signing.SigningKey.generate()
+    message = bytes.fromhex(n["nonce"]) + bytes.fromhex(subject_sha256)
+    sig = key.sign(message).signature.hex()
+    pub = key.verify_key.encode().hex()
+
+    ok1, _ = verify_attestation(n["nonce"], sig, pub, subject_sha256)
+    ok2, reason2 = verify_attestation(n["nonce"], sig, pub, subject_sha256)
+    assert ok1 and not ok2, "replaying the same nonce must fail"
+    print("ok  nonce is single-use")
+
+
+def test_attestation_rejects_unknown_nonce():
+    subject_sha256 = hashlib.sha256(b"some image bytes").hexdigest()
+    key = nacl.signing.SigningKey.generate()
+    message = bytes.fromhex("00" * 32) + bytes.fromhex(subject_sha256)
+    sig = key.sign(message).signature.hex()
+    pub = key.verify_key.encode().hex()
+
+    ok, reason = verify_attestation("ab" * 32, sig, pub, subject_sha256)
+    assert not ok, "a made-up nonce must never verify"
+    print("ok  unknown nonce rejected")
+
+
+def test_attestation_rejects_wrong_signature():
+    subject_sha256 = hashlib.sha256(b"some image bytes").hexdigest()
+    other_sha256 = hashlib.sha256(b"different image bytes").hexdigest()
+
+    n = issue_nonce()
+    key = nacl.signing.SigningKey.generate()
+    message = bytes.fromhex(n["nonce"]) + bytes.fromhex(subject_sha256)
+    sig = key.sign(message).signature.hex()
+    pub = key.verify_key.encode().hex()
+    # tampered subject hash: signature no longer covers this message
+    ok, _ = verify_attestation(n["nonce"], sig, pub, other_sha256)
+    assert not ok, "signature over a different subject hash must fail"
+
+    n2 = issue_nonce()
+    wrong_key = nacl.signing.SigningKey.generate()
+    message2 = bytes.fromhex(n2["nonce"]) + bytes.fromhex(subject_sha256)
+    sig2 = key.sign(message2).signature.hex()  # signed with `key`, verified against `wrong_key`
+    wrong_pub = wrong_key.verify_key.encode().hex()
+    ok2, _ = verify_attestation(n2["nonce"], sig2, wrong_pub, subject_sha256)
+    assert not ok2, "signature from the wrong keypair must fail"
+    print("ok  wrong signature / wrong keypair rejected")
+
+
+def test_analyze_endpoint_honours_form_attestation():
+    """Regression test for a real bug: attestation_nonce/signature/public_key
+    were plain `str | None` params on a route that also takes `File(...)`.
+    FastAPI then parses them as QUERY params, not form fields, so a client
+    sending them as multipart form data (the only sane way to send them
+    alongside an upload) silently got `attested=False` no matter what it
+    sent. Direct calls to verify_attestation() (the tests above) can't catch
+    this - it's a wiring bug in main.py's route signature, not the crypto.
+    Must go through the actual FastAPI app, not the bare function.
     """
+    from unittest.mock import patch
+
+    from fastapi.testclient import TestClient
+
+    import main
     from lanes import LaneResult
 
-    pil, bgr = load_image(_jpeg_bytes(_textured(512, 512)))
-    q = quality_gate(pil, bgr)
-    lanes = [
-        LaneResult("B", "Noise residual", 0.05, 0.8),
-        LaneResult("C", "Compression / ELA", 0.10, 0.8),
-    ]
-    plain = judge(q, lanes, attested=False)
-    claimed = judge(q, lanes, attested=True)
-    assert not CFG.trust_client_attestation, "test assumes the flag is off"
-    assert claimed.confidence == plain.confidence, "unverified claim must not raise confidence"
-    assert any("cannot verify" in r.text for r in claimed.reasons), "gap must be reported"
-    print("ok  unverified attestation grants no bonus")
+    # Neutralise lane A: if weights/lane_a.pt happens to be installed in this
+    # environment, the real trained model correctly scores a synthetic
+    # noise texture as locally-synthesised (it looks nothing like a real
+    # photo), which triggers the lane-disagreement abstain gate before the
+    # judge ever reaches the attested-bonus branch. This test is only about
+    # the FastAPI routing layer, not lane behaviour, so pin all three lanes
+    # to agree.
+    agreeable = LaneResult("X", "stub", 0.1, 0.9, ["stubbed for this test"])
+
+    client = TestClient(main.app)
+    image_bytes = _jpeg_bytes(_textured())
+    subject_sha256 = hashlib.sha256(image_bytes).hexdigest()
+
+    nonce = client.get("/v1/attest/nonce").json()["nonce"]
+    key = nacl.signing.SigningKey.generate()
+    message = bytes.fromhex(nonce) + bytes.fromhex(subject_sha256)
+    sig = key.sign(message).signature.hex()
+    pub = key.verify_key.encode().hex()
+
+    with patch.object(main, "lane_a_synthesis", return_value=agreeable), \
+         patch.object(main, "lane_b_noise", return_value=agreeable), \
+         patch.object(main, "lane_c_compression", return_value=agreeable):
+        r = client.post(
+            "/v1/analyze/single",
+            files={"image": ("s.jpg", image_bytes, "image/jpeg")},
+            data={
+                "attestation_nonce": nonce,
+                "attestation_signature": sig,
+                "attestation_public_key": pub,
+            },
+        )
+    reasons = r.json()["verdict"]["reasons"]
+    d_reasons = [x for x in reasons if x["lane"] == "D"]
+    assert d_reasons, (
+        "a valid attestation sent as multipart form data must be honoured "
+        "by the /v1/analyze/single route - if this fails, the route's "
+        "attestation params probably lost their Form(...) marker again"
+    )
+    print("ok  /v1/analyze/single honours attestation sent as real form data")
 
 
 if __name__ == "__main__":
@@ -215,8 +349,13 @@ if __name__ == "__main__":
         test_lane_disagreement_abstains,
         test_attestation_never_lowers,
         test_identity_axis_independent,
+        test_low_quality_face_needs_wider_match_margin,
         test_pair_without_face_match_never_accepts,
-        test_unverified_attestation_grants_nothing,
+        test_attestation_verifies_valid_signature,
+        test_attestation_nonce_is_single_use,
+        test_attestation_rejects_unknown_nonce,
+        test_attestation_rejects_wrong_signature,
+        test_analyze_endpoint_honours_form_attestation,
     ]:
         fn()
     print("\nall checks passed")

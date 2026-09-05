@@ -5,8 +5,12 @@
 
 import { Platform } from 'react-native';
 
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
+// VeriLens forensics-tool identity: yellow accent on near-black. #F5C400 is
+// picked over a paler yellow because it still reads clearly as text/icon
+// color against a #0A0A0A background (verified informally — bright gold on
+// near-black, not a pastel decoration).
+const tintColorLight = '#997A00';
+const tintColorDark = '#F5C400';
 
 export const Colors = {
   light: {
@@ -19,7 +23,7 @@ export const Colors = {
   },
   dark: {
     text: '#ECEDEE',
-    background: '#151718',
+    background: '#0A0A0A',
     tint: tintColorDark,
     icon: '#9BA1A6',
     tabIconDefault: '#9BA1A6',

@@ -20,6 +20,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 
 import { Colors } from '@/constants/Colors';
+import { Fonts } from '@/constants/theme';
 import { useThemeColors } from '@/hooks/useThemeColors';
 import { useAppStore } from '@/stores/media-store';
 import { VerificationSteps } from '@/components/VerificationSteps';
@@ -49,7 +50,9 @@ export default function CaptureScreen() {
     setShowCheck(true);
     try {
       // idAttested = the ID document came straight off this device's camera.
-      // The selfie is always camera-captured, so the pipeline hard-codes that.
+      // The selfie is always camera-captured; the pipeline separately
+      // attempts real Lane D capture attestation (nonce + device signature)
+      // for it before calling the forensics service.
       await startKycCheck(idUri, selfieUri, idAttested);
     } catch (err: any) {
       Alert.alert('Check Failed', err?.message ?? 'Please try again.');
@@ -130,7 +133,7 @@ export default function CaptureScreen() {
           onPress={requestPermission}
           style={[styles.permissionButton, { backgroundColor: Colors.primary[500] }]}
         >
-          <Text style={styles.permissionButtonText}>Grant Permission</Text>
+          <Text style={[styles.permissionButtonText, { color: '#0A0A0A' }]}>Grant Permission</Text>
         </Pressable>
       </View>
     );
@@ -215,7 +218,7 @@ export default function CaptureScreen() {
           ]}
         >
           <LinearGradient
-            colors={isSelfieStage ? ['#10B981', '#059669'] : ['#3B82F6', '#8B5CF6']}
+            colors={isSelfieStage ? ['#10B981', '#059669'] : ['#F5C400', '#CCA200']}
             style={styles.captureGradient}
           >
             <View style={styles.captureInner} />
@@ -266,7 +269,7 @@ export default function CaptureScreen() {
               <LinearGradient
                 colors={
                   currentCheck?.isRunning
-                    ? ['#3B82F6', '#8B5CF6']
+                    ? ['#F5C400', '#CCA200']
                     : failed
                     ? ['#EF4444', '#B91C1C']
                     : ['#10B981', '#059669']
@@ -284,7 +287,7 @@ export default function CaptureScreen() {
                       : 'shield-checkmark'
                   }
                   size={32}
-                  color="#FFFFFF"
+                  color={currentCheck?.isRunning ? '#0A0A0A' : '#FFFFFF'}
                 />
               </LinearGradient>
             </Animated.View>
@@ -357,8 +360,8 @@ export default function CaptureScreen() {
                 >
                   {result.anchorTx && (
                     <View style={styles.resultDetailRow}>
-                      <View style={[styles.resultDetailIcon, { backgroundColor: '#8B5CF620' }]}>
-                        <Ionicons name="link" size={16} color="#8B5CF6" />
+                      <View style={[styles.resultDetailIcon, { backgroundColor: '#F5C40020' }]}>
+                        <Ionicons name="link" size={16} color="#F5C400" />
                       </View>
                       <View style={{ flex: 1 }}>
                         <Text style={[styles.resultDetailLabel, { color: colors.textSecondary }]}>
@@ -371,8 +374,8 @@ export default function CaptureScreen() {
                     </View>
                   )}
                   <View style={styles.resultDetailRow}>
-                    <View style={[styles.resultDetailIcon, { backgroundColor: '#3B82F620' }]}>
-                      <Ionicons name="card" size={16} color="#3B82F6" />
+                    <View style={[styles.resultDetailIcon, { backgroundColor: '#8A8A8A20' }]}>
+                      <Ionicons name="card" size={16} color="#8A8A8A" />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.resultDetailLabel, { color: colors.textSecondary }]}>
@@ -403,7 +406,7 @@ export default function CaptureScreen() {
                   style={({ pressed }) => [{ opacity: pressed ? 0.9 : 1, transform: [{ scale: pressed ? 0.97 : 1 }] }]}
                 >
                   <LinearGradient
-                    colors={['#3B82F6', '#8B5CF6']}
+                    colors={['#242424', '#0A0A0A']}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
                     style={styles.viewDetailsButton}
@@ -417,7 +420,7 @@ export default function CaptureScreen() {
 
             {currentCheck?.isRunning && (
               <View style={styles.runningIndicator}>
-                <ActivityIndicator size="small" color={Colors.primary[500]} />
+                <ActivityIndicator size="small" color={colors.tint} />
                 <Text style={[styles.runningText, { color: colors.textSecondary }]}>
                   Processing...
                 </Text>
@@ -608,7 +611,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   resultDetailLabel: { fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.3 },
-  resultDetailValue: { fontSize: 13, fontWeight: '600', marginTop: 2 },
+  resultDetailValue: { fontSize: 13, fontWeight: '600', marginTop: 2, fontFamily: Fonts?.mono },
   viewDetailsButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -618,7 +621,7 @@ const styles = StyleSheet.create({
     paddingVertical: 18,
     borderRadius: 16,
     marginTop: 8,
-    shadowColor: '#3B82F6',
+    shadowColor: '#F5C400',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
     shadowRadius: 12,

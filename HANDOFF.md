@@ -99,7 +99,7 @@ manager / earlier messages — not reproduced here):
 | Sepolia anchoring | ✅ working — zero-address self-transfer, no contract deploy needed |
 | Supabase cloud (cases + review queue + images) | ✅ working, verified end-to-end |
 | App capture flow, review queue, case detail | ✅ working, `tsc` clean (1 pre-existing baseline error, see §8) |
-| Lane A (trained synthesis detector) | 🟡 optional — see §6 for current checkpoint status |
+| Lane A (trained synthesis detector) | 🟡 optional, **and not yet reliable off-distribution** — see §6 |
 | Lane E (face match) | 🟡 optional — needs `requirements-ml.txt`; abstains cleanly without it |
 | SightEngine baseline comparison | 🟡 optional — needs free-trial creds, only affects the demo narrative |
 
@@ -121,16 +121,66 @@ print({k: v for k, v in ck.items() if k != 'state_dict'})"
 
 `val_acc_exchanged` is the number that matters — it's the setting where
 published detectors fall to chance, and `lane_a.py` reads it back as the
-lane's confidence weight. **A checkpoint with a low `val_acc_exchanged` is
-automatically down-weighted or excluded by the judge — it cannot be
-accidentally trusted.**
+lane's confidence weight (now capped, see below). **A checkpoint with a low
+`val_acc_exchanged` is automatically down-weighted or excluded by the judge —
+it cannot be accidentally trusted.**
 
-If you need to (re)train: `service/verilens_lane_a_training.ipynb` runs on
-Kaggle (dataset already mounted there — toggle **Internet: On**, which needs
-a phone-verified Kaggle account) or Google Colab (always has internet, but
-downloads the ~9.9 GB dataset per session). Both paths were fixed mid-build
-after failing for three separate reasons — read the notebook's header cell,
-it documents the gotchas so you don't hit them again.
+**But a high `val_acc_exchanged` doesn't mean it's production-ready either —
+verified this session with real photos, not assumed.** The current
+checkpoint reports 0.99 `val_acc_exchanged`, measured on a held-out split of
+the *same* narrow, curated CelebA-HQ/INP-X distribution it trained on.
+Manually testing it against real phone photos outside that distribution
+(two different real people, an ID card, a studio headshot, and one actual
+AI-generated headshot) found: confident false positives (>0.95 "fake" on
+genuine real photos) and a confident false negative (missed the real
+AI-generated photo entirely, scored ~0). Two mitigations are shipped:
+Lane A now restricts scanning to the detected face region (matches how it
+was trained; falls back to full-frame if no face detector is available —
+see `_face_crop_bbox` in `service/lane_a.py`), and its confidence weight is
+capped at `CFG.lane_a_confidence_cap` (0.5) so it can't dominate the judge
+against contrary evidence from lanes B/C. Neither fix touches the model
+itself — that needs retraining on a broader, less curated dataset. **Across
+every test case in this session, the system never produced a false
+ACCEPT** — the `min_usable_lanes` and lane-disagreement abstention gates
+correctly routed every affected case to REVIEW instead — but expect a higher
+REVIEW rate on real users until Lane A is retrained on real-world data.
+
+**A retrain is prepared and ready to run**, targeting both failure modes
+above: `service/verilens_lane_a_training.ipynb` and `service/train_lane_a.py`
+now support blending in `xhlulu/140k-real-and-fake-faces` (70k real FFHQ
+photos + 70k StyleGAN-generated fakes) alongside INP-X, plus CNNDetection-
+style augmentation (`--augment`, on by default: random JPEG recompression/
+blur/resize per patch — the single most load-bearing trick for cross-
+generator generalisation, per Wang et al. 2020). The recommended invocation
+now drops `--face-only` (keep `--face-weight` alone) so CityScapes/
+OpenImages/SUN_RGBD — already downloaded with INP-X, no extra cost —
+contribute real-world photo diversity instead of training on CelebA-HQ
+exclusively. Fully backward compatible: omit `--faces140k-data` and it
+trains on INP-X alone, same as before. Runs on **Kaggle**, **Google Colab**,
+or **locally** — the notebook detects which; the training script itself has
+no platform-specific code.
+
+```bash
+python train_lane_a.py \
+    --data /path/to/inpainting-exchange \
+    --faces140k-data /path/to/140k-real-and-fake-faces \
+    --out weights/lane_a.pt
+```
+
+The checkpoint now also records `val_acc_faces140k_real`/`_fake` alongside
+the existing `val_acc_exchanged`/`_inpainted`/`_original` — `faces140k_fake`
+is the new headline number for the specific failure this retrain targets
+(whole-image AI-generated content), since `exchanged` only ever measured
+local-edit detection.
+
+**Before trusting the new checkpoint, validate it against real, non-dataset
+photos the way this session did — do not just read `val_acc_exchanged` or
+`val_acc_faces140k_fake` and call it done.** Those numbers are held-out
+splits of the *same* datasets just trained on; that exact mistake (trusting
+a same-distribution validation split) is what produced the checkpoint this
+retrain replaces. Drop the new `lane_a.pt` into `service/weights/`, run
+`service/test_service.py`, and re-test against real photos of real people —
+not just the training datasets' own held-out images.
 
 ## 7. The pitch deck
 
@@ -155,13 +205,14 @@ app's root `package.json` and was reverted. If you regenerate the deck,
   held-out calibration set exists. The UI is required to label it
   "(uncalibrated)" whenever this flag is false. Don't silently drop the
   label to make a number look more impressive.
-- The `attested` flag (live capture vs. gallery import) is **client-asserted
-  and not yet cryptographically verified** by the service
-  (`config.trust_client_attestation = False`). It is deliberately excluded
-  from the confidence calculation for this reason — a hostile client could
-  otherwise just claim `attested=true`. This is documented in the model
-  card (`GET /v1/model-card`) and the service README, not a bug to silently
-  "fix" by trusting the flag.
+- Capture attestation (Lane D) is now **cryptographically verified**, not
+  client-asserted: the device signs a server-issued single-use nonce
+  (`GET /v1/attest/nonce`) concatenated with the selfie's sha256 using its
+  Ed25519 key, and `service/attestation.py` verifies that signature before
+  `attested_bonus` is applied. A missing or failed attestation is silent —
+  never evidence of fakery, per Lane D's design. The nonce store is
+  in-memory and single-process (fine for this demo; see the `# ponytail:`
+  comment in `service/attestation.py` for the multi-instance upgrade path).
 
 ## 9. If you only have 10 minutes before presenting
 

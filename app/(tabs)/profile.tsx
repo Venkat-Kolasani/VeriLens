@@ -130,12 +130,12 @@ export default function ProfileScreen() {
         {/* Profile Header */}
         <Animated.View entering={FadeInDown.delay(100).springify()} style={styles.headerSection}>
           <LinearGradient
-            colors={['#3B82F6', '#8B5CF6']}
+            colors={['#242424', '#0A0A0A']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.avatar}
           >
-            <Ionicons name="shield-checkmark" size={36} color="#FFFFFF" />
+            <Ionicons name="shield-checkmark" size={36} color="#F5C400" />
           </LinearGradient>
           <Text style={[styles.headerTitle, { color: colors.text }]}>VeriLens</Text>
           <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
@@ -146,7 +146,7 @@ export default function ProfileScreen() {
         {/* Stats */}
         <Animated.View entering={FadeInDown.delay(200).springify()} style={[styles.statsContainer, { backgroundColor: isDark ? Colors.dark.card : Colors.light.card, borderColor: isDark ? Colors.dark.border : Colors.light.border }]}>
           <View style={styles.statItem}>
-            <Text style={[styles.statNumber, { color: Colors.primary[500] }]}>{stats.total}</Text>
+            <Text style={[styles.statNumber, { color: colors.tint }]}>{stats.total}</Text>
             <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Cases</Text>
           </View>
           <View style={[styles.statDivider, { backgroundColor: isDark ? Colors.dark.border : Colors.light.border }]} />
@@ -156,7 +156,7 @@ export default function ProfileScreen() {
           </View>
           <View style={[styles.statDivider, { backgroundColor: isDark ? Colors.dark.border : Colors.light.border }]} />
           <View style={styles.statItem}>
-            <Text style={[styles.statNumber, { color: '#8B5CF6' }]}>{stats.onChain}</Text>
+            <Text style={[styles.statNumber, { color: colors.text }]}>{stats.onChain}</Text>
             <Text style={[styles.statLabel, { color: colors.textSecondary }]}>On-Chain</Text>
           </View>
         </Animated.View>
@@ -184,18 +184,18 @@ export default function ProfileScreen() {
           <View style={[styles.walletTypeBadge, {
             backgroundColor: isConfiguredWallet
               ? Colors.success + '15'
-              : Colors.primary[500] + '15',
+              : colors.tint + '15',
             borderColor: isConfiguredWallet
               ? Colors.success + '40'
-              : Colors.primary[500] + '40',
+              : colors.tint + '40',
           }]}>
             <Ionicons
               name={isConfiguredWallet ? 'shield-checkmark' : 'phone-portrait-outline'}
               size={14}
-              color={isConfiguredWallet ? Colors.success : Colors.primary[500]}
+              color={isConfiguredWallet ? Colors.success : colors.tint}
             />
             <Text style={[styles.walletTypeBadgeText, {
-              color: isConfiguredWallet ? Colors.success : Colors.primary[500],
+              color: isConfiguredWallet ? Colors.success : colors.tint,
             }]}>
               {isConfiguredWallet ? 'Configured deployer wallet' : 'Device-generated wallet'}
             </Text>
@@ -277,8 +277,8 @@ export default function ProfileScreen() {
               { step: '6', text: 'Accept, reject, or send to review', icon: 'clipboard' },
             ].map((item) => (
               <View key={item.step} style={styles.howStep}>
-                <View style={[styles.howStepNumber, { backgroundColor: Colors.primary[500] + '20' }]}>
-                  <Text style={[styles.howStepNumberText, { color: Colors.primary[500] }]}>{item.step}</Text>
+                <View style={[styles.howStepNumber, { backgroundColor: colors.tint + '20' }]}>
+                  <Text style={[styles.howStepNumberText, { color: colors.tint }]}>{item.step}</Text>
                 </View>
                 <Text style={[styles.howStepText, { color: colors.text }]}>{item.text}</Text>
               </View>
@@ -303,7 +303,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 14,
-    shadowColor: '#3B82F6',
+    shadowColor: '#F5C400',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
     shadowRadius: 12,

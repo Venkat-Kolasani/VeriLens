@@ -22,6 +22,13 @@ _WEIGHTS_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "weight
 # An embedding off a 30px thumbnail is noise wearing a 512-dim costume.
 _MIN_FACE_PX = 40
 
+# w600k_r50 (the recognition net buffalo_l ships) takes a 112x112 input. A
+# detected face crop smaller than that is upsampled internally before the
+# network sees it, degrading the embedding it produces -- still usable, but
+# a weaker signal than the same cosine score off a full-resolution face.
+# Common real case: a low-res ID-document photo vs. a full selfie.
+LOW_QUALITY_FACE_PX = 112
+
 _model = None  # module-level cache; see _get_model
 
 
@@ -54,21 +61,24 @@ def _bbox_px(face) -> float:
 
 def face_similarity(
     id_bgr: np.ndarray, selfie_bgr: np.ndarray
-) -> tuple[float | None, list[str]]:
+) -> tuple[float | None, list[str], bool]:
     """Cosine similarity between the ID-photo face and the selfie face.
 
-    Returns (similarity, reasons), or (None, reasons) when no honest
-    similarity exists: deps missing, no face in either image, more than one
-    face in the selfie, or a face too small to embed.
+    Returns (similarity, reasons, low_quality_face), or (None, reasons, False)
+    when no honest similarity exists: deps missing, no face in either image,
+    more than one face in the selfie, or a face too small to embed.
+    `low_quality_face` is True when a similarity WAS computed but off a face
+    crop below LOW_QUALITY_FACE_PX -- the caller should require a stronger
+    margin before treating it as a confident MATCH.
     """
     reasons: list[str] = []
 
     try:
         model = _get_model()
     except ImportError:
-        return None, ["Face matching unavailable: insightface not installed."]
+        return None, ["Face matching unavailable: insightface not installed."], False
     except Exception as e:  # noqa: BLE001 - model download/init failure is not a verdict
-        return None, [f"Face matching unavailable: could not load face model ({e})."]
+        return None, [f"Face matching unavailable: could not load face model ({e})."], False
 
     id_faces = model.get(id_bgr)
     selfie_faces = model.get(selfie_bgr)
@@ -79,22 +89,23 @@ def face_similarity(
 
     if not id_faces:
         reasons.append("No face detected in the ID photo.")
-        return None, reasons
+        return None, reasons, False
     if not selfie_faces:
         reasons.append("No face detected in the selfie.")
-        return None, reasons
+        return None, reasons, False
     if len(selfie_faces) > 1:
         reasons.append(
             f"{len(selfie_faces)} faces in the selfie; cannot tell which one is "
             "the applicant."
         )
-        return None, reasons
+        return None, reasons, False
 
     # ID documents routinely carry a small ghost portrait alongside the main
     # one, so take the largest face rather than abstaining on count.
     id_face = max(id_faces, key=_bbox_px)
     selfie_face = selfie_faces[0]
 
+    low_quality = False
     for face, where in ((id_face, "ID photo"), (selfie_face, "selfie")):
         px = _bbox_px(face)
         if px < _MIN_FACE_PX:
@@ -102,13 +113,20 @@ def face_similarity(
                 f"Face in the {where} is only {px:.0f}px across; below "
                 f"{_MIN_FACE_PX}px an embedding is unreliable."
             )
-            return None, reasons
+            return None, reasons, False
+        if px < LOW_QUALITY_FACE_PX:
+            reasons.append(
+                f"Face in the {where} is only {px:.0f}px across; below the "
+                f"{LOW_QUALITY_FACE_PX}px the recognition model expects, so this "
+                "match needs a wider margin to count as confident."
+            )
+            low_quality = True
 
     a = np.asarray(id_face.normed_embedding, dtype=np.float64)
     b = np.asarray(selfie_face.normed_embedding, dtype=np.float64)
     sim = float(np.clip(np.dot(a, b), -1.0, 1.0))  # already unit-norm
     reasons.append(f"Cosine similarity between the two face embeddings: {sim:.3f}.")
-    return sim, reasons
+    return sim, reasons, low_quality
 
 
 if __name__ == "__main__":

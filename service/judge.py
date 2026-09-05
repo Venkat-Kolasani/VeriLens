@@ -61,14 +61,26 @@ def judge(
     attested: bool = False,
     face_similarity: float | None = None,
     require_identity: bool = False,
+    low_quality_face: bool = False,
 ) -> Verdict:
     reasons: list[Reason] = []
 
     identity: Identity | None = None
     if face_similarity is not None:
-        if face_similarity >= CFG.face_match_above:
+        match_bar = CFG.face_match_above + (CFG.face_match_low_quality_margin if low_quality_face else 0.0)
+        if face_similarity >= match_bar:
             identity = "MATCH"
             reasons.append(Reason("E", f"Selfie matches ID photo (similarity {face_similarity:.2f}).", "info"))
+        elif low_quality_face and face_similarity >= CFG.face_match_above:
+            identity = "INDETERMINATE"
+            reasons.append(Reason(
+                "E",
+                f"Similarity {face_similarity:.2f} clears the normal match bar "
+                f"({CFG.face_match_above:.2f}) but the face crop was low-resolution, "
+                f"which needs {match_bar:.2f}+ to count as a confident match. "
+                "Routing to review rather than accepting a weak signal.",
+                "warn",
+            ))
         elif face_similarity <= CFG.face_mismatch_below:
             identity = "MISMATCH"
             reasons.append(Reason("E", f"Selfie does NOT match ID photo (similarity {face_similarity:.2f}).", "critical"))
@@ -132,18 +144,10 @@ def judge(
     if attested:
         # Attestation RAISES confidence only. Its absence is never evidence
         # of fakery -- almost every genuine photo carries no attestation.
-        if CFG.trust_client_attestation:
-            base_conf = min(1.0, base_conf + CFG.attested_bonus)
-            reasons.append(
-                Reason("D", "Image was captured live in-app with a verified device attestation.", "info")
-            )
-        else:
-            # Claimed but unverifiable, so it earns nothing. Reported anyway
-            # so the gap is visible rather than silently ignored.
-            reasons.append(
-                Reason("D", "Client claims live in-app capture, but the service cannot verify "
-                            "it yet (no signed nonce). Claim recorded, confidence unchanged.", "info")
-            )
+        base_conf = min(1.0, base_conf + CFG.attested_bonus)
+        reasons.append(
+            Reason("D", "Image was captured live in-app with a verified device attestation.", "info")
+        )
 
     if agg >= CFG.fake_above:
         authenticity: Authenticity = "LIKELY_FAKE"

@@ -4,7 +4,13 @@ import { Platform } from 'react-native';
 import { anchorProof } from './blockchain';
 import { getPublicKey, hashMediaFile, signData } from './crypto';
 import { insertCase, updateCase } from './db';
-import { ForensicsUnavailable, analyzeKycPair, type AnalyzeResult } from './forensics';
+import {
+  ForensicsUnavailable,
+  analyzeKycPair,
+  fetchAttestationNonce,
+  type AnalyzeResult,
+  type Attestation,
+} from './forensics';
 import { uploadCaseImageToStorage, uploadCaseToSupabase } from './supabase';
 import type { KYCCase, VerificationStep } from './types';
 
@@ -79,9 +85,11 @@ export async function runKycCheck(
     idImageUrl: null,
     selfieUri,
     selfieSha256: '',
-    // The selfie is always camera-captured: app/(tabs)/capture.tsx has no
-    // picker path for it, only for the ID document.
-    selfieAttested: true,
+    // Whether Lane D capture attestation was attempted (nonce fetched,
+    // selfie hash signed with the device key, sent to the server). This is
+    // NOT a verdict on whether the server accepted it — the service verifies
+    // the signature independently and absence is never held against a case.
+    selfieAttested: false,
     selfieUrl: null,
     lanes: null,
     authenticity: null,
@@ -138,6 +146,21 @@ export async function runKycCheck(
     throw err;
   }
 
+  // Lane D: best-effort selfie capture attestation. Deliberately NOT part of
+  // the hash/sign try/catch above — a nonce-fetch or signing hiccup here
+  // must never fail the case (HANDOFF.md: absence of attestation is never
+  // evidence of anything).
+  let attestation: Attestation | null = null;
+  try {
+    const { nonce } = await fetchAttestationNonce();
+    const signature = await signData(nonce + kycCase.selfieSha256);
+    const publicKey = (await getPublicKey()) ?? '';
+    attestation = { nonce, signature, publicKey };
+    kycCase.selfieAttested = true;
+  } catch (err: any) {
+    console.warn('Selfie attestation unavailable, proceeding without it:', err?.message ?? err);
+  }
+
   // Step 3: Forensic analysis
   //
   // A ForensicsUnavailable here is terminal for the case: the verdict fields
@@ -147,9 +170,9 @@ export async function runKycCheck(
   onProgress(steps);
   let analysis: AnalyzeResult;
   try {
-    // The selfie is the image injection defence cares about, and it is
-    // always attested here.
-    analysis = await analyzeKycPair(idImageUri, selfieUri, kycCase.selfieAttested);
+    // The selfie is the image injection defence cares about — pass along
+    // whatever attestation we managed to acquire above (may be null).
+    analysis = await analyzeKycPair(idImageUri, selfieUri, attestation);
   } catch (err: any) {
     const detail =
       err instanceof ForensicsUnavailable

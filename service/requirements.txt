@@ -10,6 +10,7 @@ numpy==2.2.1
 opencv-python-headless==4.11.0.86
 scipy==1.15.1
 httpx==0.28.1
+pynacl==1.5.0
 
 # Lane A (trained) and Lane E (face match) add torch/timm/insightface.
 # Kept in requirements-ml.txt so the base service stays deployable
