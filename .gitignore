@@ -63,3 +63,9 @@ service/data/
 service/kaggle_job/
 service/kaggle_train/
 .kaggle/
+
+# pitch deck build artifacts (icons, intermediate renders); keep the deck + script + handoff doc
+pitch/node_modules/
+pitch/icons/
+pitch/*.jpg
+pitch/*.pdf
