@@ -307,11 +307,15 @@ def test_attestation_rejects_wrong_signature():
     print("ok  wrong signature / wrong keypair rejected")
 
 
-def test_pair_endpoint_skips_screen_replay_for_id_image():
-    """Real bug found via live testing: a genuine laminated/holographic ID
-    card produces a false-positive moire-like signature from its own
-    surface, unrelated to actual screen/print replay -- so Lane G must run
-    on the selfie only, never the ID image, in the pair endpoint.
+def test_pair_endpoint_runs_screen_replay_on_both_images():
+    """Lane G runs on both images now that it's patch-wise (see
+    test_lane_screen.py's test_localised_pattern_scores_lower_than_widespread
+    for the fix itself) -- it was briefly selfie-only after a genuine
+    laminated/holographic ID card false-positived against the old
+    whole-image version, but the patch-wise redesign scores by how many
+    spatially different patches show the signature, so a small physical
+    feature (hologram sticker) no longer reads the same as a full-frame
+    replay and it's safe to run everywhere again.
     """
     from fastapi.testclient import TestClient
 
@@ -330,9 +334,9 @@ def test_pair_endpoint_skips_screen_replay_for_id_image():
     body = r.json()
     id_lanes = {l["lane"] for l in body["id_image"]["lanes"]}
     selfie_lanes = {l["lane"] for l in body["selfie"]["lanes"]}
-    assert "G" not in id_lanes, f"Lane G must not run on the ID image, got lanes {id_lanes}"
+    assert "G" in id_lanes, f"Lane G must run on the ID image, got lanes {id_lanes}"
     assert "G" in selfie_lanes, f"Lane G must run on the selfie, got lanes {selfie_lanes}"
-    print("ok  Lane G (screen/print replay) runs on the selfie only, not the ID image")
+    print("ok  Lane G (screen/print replay) runs on both the ID image and the selfie")
 
 
 def test_analyze_endpoint_honours_form_attestation():
@@ -410,7 +414,7 @@ if __name__ == "__main__":
         test_attestation_nonce_is_single_use,
         test_attestation_rejects_unknown_nonce,
         test_attestation_rejects_wrong_signature,
-        test_pair_endpoint_skips_screen_replay_for_id_image,
+        test_pair_endpoint_runs_screen_replay_on_both_images,
         test_analyze_endpoint_honours_form_attestation,
     ]:
         fn()

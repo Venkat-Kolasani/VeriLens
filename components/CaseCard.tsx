@@ -88,20 +88,18 @@ export function CaseCard({ kycCase }: CaseCardProps) {
 
         <View style={[styles.statusDot, { backgroundColor: statusColor(kycCase.status) }]} />
 
-        {kycCase.status === 'failed' && (
-          <Pressable
-            onPress={retry}
-            disabled={retrying}
-            hitSlop={8}
-            style={[styles.retryButton, { backgroundColor: Colors.primary[500] }]}
-          >
-            {retrying ? (
-              <ActivityIndicator size="small" color="#0A0A0A" />
-            ) : (
-              <Ionicons name="refresh" size={16} color="#0A0A0A" />
-            )}
-          </Pressable>
-        )}
+        <Pressable
+          onPress={retry}
+          disabled={retrying}
+          hitSlop={8}
+          style={[styles.retryButton, { backgroundColor: Colors.primary[500] }]}
+        >
+          {retrying ? (
+            <ActivityIndicator size="small" color="#0A0A0A" />
+          ) : (
+            <Ionicons name="refresh" size={16} color="#0A0A0A" />
+          )}
+        </Pressable>
       </View>
 
       <View style={styles.info}>
@@ -163,20 +161,18 @@ export function CaseListCard({ kycCase }: CaseCardProps) {
         </Text>
       </View>
 
-      {kycCase.status === 'failed' && (
-        <Pressable
-          onPress={retry}
-          disabled={retrying}
-          hitSlop={8}
-          style={[styles.listRetryButton, { backgroundColor: Colors.primary[500] }]}
-        >
-          {retrying ? (
-            <ActivityIndicator size="small" color="#0A0A0A" />
-          ) : (
-            <Ionicons name="refresh" size={18} color="#0A0A0A" />
-          )}
-        </Pressable>
-      )}
+      <Pressable
+        onPress={retry}
+        disabled={retrying}
+        hitSlop={8}
+        style={[styles.listRetryButton, { backgroundColor: Colors.primary[500] }]}
+      >
+        {retrying ? (
+          <ActivityIndicator size="small" color="#0A0A0A" />
+        ) : (
+          <Ionicons name="refresh" size={18} color="#0A0A0A" />
+        )}
+      </Pressable>
     </Pressable>
   );
 }

@@ -100,17 +100,16 @@ async def _read_upload(f: UploadFile) -> bytes:
     return data
 
 
-def _analyze_one(data: bytes, *, check_screen_replay: bool = True):
+def _analyze_one(data: bytes):
     """Run the quality gate and every lane over one image.
 
-    check_screen_replay=False for ID documents: confirmed via live testing
-    that a genuine laminated/holographic Aadhar card's own surface can
-    produce a periodic frequency-domain signature similar to screen moire,
-    a false positive unrelated to the actual threat Lane G defends against
-    (someone replaying a fake SELFIE via screen/print). ID documents don't
-    have that threat model the same way, and they do have a confirmed
-    confound Lane G can't yet tell apart from a real screen replay -- so
-    skip it there rather than ship a known false-positive source.
+    Lane G (screen/print replay) runs on the ID image too, not just the
+    selfie -- it used to be selfie-only because a genuine laminated/
+    holographic Aadhar card false-positived against it (confirmed live).
+    Lane G is now patch-wise (see lane_screen.py): it scores by how many
+    spatially DIFFERENT patches show the periodic signature, so a small
+    localised feature (a hologram sticker) no longer reads the same as a
+    genuine full-frame screen replay, and it's safe to run everywhere again.
     """
     import hashlib
 
@@ -124,9 +123,8 @@ def _analyze_one(data: bytes, *, check_screen_replay: bool = True):
         refine_lane_a(lane_a_synthesis(bgr), data, bgr),
         lane_b_noise(bgr),
         lane_c_compression(pil, bgr),
+        lane_screen_replay(bgr),
     ]
-    if check_screen_replay:
-        results.append(lane_screen_replay(bgr))
     h, w = bgr.shape[:2]
 
     analysis = ImageAnalysis(
@@ -203,9 +201,7 @@ async def analyze(
     Attestation is always over the selfie — it's the image injection defence
     cares about (an ID document photo is not live-captured by the user).
     """
-    id_analysis, id_q, id_results, id_bgr, _ = _analyze_one(
-        await _read_upload(id_image), check_screen_replay=False
-    )
+    id_analysis, id_q, id_results, id_bgr, _ = _analyze_one(await _read_upload(id_image))
     selfie_analysis, s_q, s_results, s_bgr, _ = _analyze_one(await _read_upload(selfie))
     verified = _check_attestation(
         selfie_analysis.sha256, attestation_nonce, attestation_signature, attestation_public_key
@@ -331,12 +327,13 @@ def model_card():
              "reads": "cosine similarity between ID and selfie face embeddings",
              "optional_deps": "requirements-ml.txt"},
             {"id": "G", "name": "Screen/print replay", "trained": False,
-             "reads": "FFT moire-pattern signature of a photographed screen/print; "
-                      "selfie only, not the ID image (a genuine laminated/holographic "
-                      "ID card produces a similar false-positive signature - confirmed "
-                      "via live testing); new, unvalidated against any labelled "
-                      "dataset, confidence capped accordingly "
-                      "(CFG.screen_replay_confidence)"},
+             "reads": "patch-wise FFT moire-pattern signature of a photographed screen/"
+                      "print, scored by how many spatially different patches show it "
+                      "(a widespread signature reads as a genuine replay; a signature "
+                      "confined to one or two patches reads as a small physical feature "
+                      "like a hologram sticker, not a replay); runs on both the ID image "
+                      "and the selfie; new, unvalidated against any labelled dataset, "
+                      "confidence capped accordingly (CFG.screen_replay_confidence)"},
         ],
         "thresholds": {k: v for k, v in vars(CFG).items()} or asdict(CFG),
         "confidence_is_calibrated": CFG.confidence_is_calibrated,
@@ -385,13 +382,16 @@ def model_card():
             "dataset.",
             "Lane G (screen/print replay) is new and unvalidated against any "
             "labelled dataset of real vs. replayed photos - reasoned about and "
-            "spot-checked manually only, not measured. It runs on the selfie only, "
-            "not the ID image - confirmed via live testing that a genuine "
-            "laminated/holographic Aadhar card produces a false-positive moire-like "
-            "signature from its own surface, unrelated to screen/print replay. Known "
-            "false-positive risk remains even on the selfie: fine periodic "
-            "real-world texture (mesh fabric, patterned wallpaper). Known "
-            "false-negative risk: high-DPI/anti-moire screens and good print "
+            "spot-checked manually only, not measured. It was originally selfie-only "
+            "because a whole-image FFT couldn't tell a genuine laminated/holographic "
+            "ID card's own surface pattern apart from a real screen replay (confirmed "
+            "live) - fixed by scoring patch-wise instead of whole-image, so a signal "
+            "confined to a small physical feature (hologram sticker, foil strip) no "
+            "longer reads the same as a widespread full-frame replay, and it now runs "
+            "on both images again. Known false-positive risk remains: fine periodic "
+            "real-world texture spread across MOST of the frame (mesh fabric, a "
+            "striped shirt filling most of the photo) can still read as widespread. "
+            "Known false-negative risk: high-DPI/anti-moire screens and good print "
             "quality. Its confidence is capped low (CFG.screen_replay_confidence) "
             "so it contributes evidence without being trusted as a solved problem.",
         ],

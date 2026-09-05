@@ -36,12 +36,28 @@ _ASSIST_MIN_CONF = 0.70
 _AGREE_CONF = 0.62
 
 _PROMPT = (
-    "You inspect a KYC identity-document photo or a selfie for LOCAL "
-    "synthesis: an AI-generated or inpainted face region, a pasted portrait, "
-    "or a face that does not belong to the original capture. Ignore identity "
-    "matching. Reply with JSON only: "
-    '{"synthetic": <true if locally synthesised or pasted, else false>, '
-    '"confidence": <number 0 to 1>}.'
+    "You are a forensic image analyst screening a KYC identity-document photo "
+    "or a selfie for ANY sign of AI generation or manipulation. Check for BOTH: "
+    "(1) LOCAL edits - a pasted or inpainted face region, mismatched lighting, "
+    "shadows, or skin tone at region boundaries, a face that does not belong to "
+    "the rest of the capture; and (2) WHOLE-IMAGE synthesis - the entire photo "
+    "generated from scratch by a diffusion model or GAN, with NO visible seam "
+    "at all, since nothing was pasted onto anything. "
+    "For (2) specifically, look for: unnaturally perfect or symmetric skin with "
+    "no pores, blemishes, or texture variation; a waxy or plastic-looking "
+    "surface; missing, odd, or asymmetric catchlights/reflections in the eyes; "
+    "irregular ear, teeth, or hair-strand geometry, especially where hair meets "
+    "the background; unnaturally smooth or melted-looking background "
+    "transitions; an overall 'too perfect', studio-generated look uncommon in "
+    "an ordinary phone photo. "
+    "A clean, front-facing photo on a plain background is NOT automatically "
+    "real - many AI-generated headshots look exactly like that. Do not default "
+    "to 'real' just because there is no visible editing seam; whole-image "
+    "generation has none by construction. "
+    "Ignore identity matching - only judge whether the pixels themselves are "
+    "synthesised. Reply with JSON only: "
+    '{"synthetic": <true if EITHER local synthesis OR whole-image AI generation '
+    'is present, else false>, "confidence": <number 0 to 1>}.'
 )
 
 
