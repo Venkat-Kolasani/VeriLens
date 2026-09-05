@@ -51,7 +51,8 @@ service/main.py             FastAPI app — /v1/analyze, /v1/analyze/single, /v1
 service/lanes.py            Quality gate, Lane B (noise residual), Lane C (compression/ELA)
 service/lane_a.py           Lane A — trained patch-level local-synthesis detector (optional)
 service/lane_face.py        Lane E — ArcFace face match (optional)
-service/lane_screen.py      Lane G — screen/print replay via FFT moire detection (new, unvalidated)
+service/lane_screen.py      Lane G — screen/print replay via patch-wise FFT moire detection (new, unvalidated)
+service/lane_a_refine.py    Optional Groq LLM secondary opinion folded into Lane A (see §8)
 service/judge.py            Rule-based judge: combines lanes into the three-axis verdict
 service/config.py           Every threshold in one place — nothing hardcoded inline
 service/train_lane_a.py     Lane A trainer (INP-X, Kaggle or Colab or local)
@@ -114,6 +115,8 @@ manager / earlier messages — not reproduced here):
 | App capture flow, review queue, case detail | ✅ working, `tsc` clean (1 pre-existing baseline error, see §8) |
 | Lane A (trained synthesis detector) | 🟡 optional, **and not yet reliable off-distribution** — see §6 |
 | Lane E (face match) | 🟡 optional — needs `requirements-ml.txt`; abstains cleanly without it |
+| Lane G (screen/print replay) | 🟡 new, unvalidated — patch-wise redesign confirmed live, see §8 |
+| Lane A refine (Groq secondary opinion) | 🟡 optional, needs `GROQ_API_KEY` — non-deterministic, see §8 |
 | SightEngine baseline comparison | 🟡 optional — needs free-trial creds, only affects the demo narrative |
 
 **The app and service are fully demoable right now with zero optional pieces
@@ -275,7 +278,132 @@ app's root `package.json` and was reverted. If you regenerate the deck,
   [id].tsx`'s expandable section content mounted with no transition, causing
   a blank-frame flash on Android while layout recalculated; wrapped it in
   `Animated.View entering={FadeIn}` to match the screen's existing reanimated
-  patterns.
+  patterns. A follow-up bug in the same family reappeared once: `resultCard`'s
+  own BASE style (not the inline override) also had `alignItems: 'center'`,
+  which triggers the identical collapse for any card reusing that style
+  without an explicit `width: '100%'` on its own root. Fixed at the component
+  level this time instead of per-callsite: `VerdictReasons` and `LaneScores`
+  (`components/Verdict.tsx`) now set `width: '100%'` on their own root, so
+  neither depends on the parent's `alignItems` ever again.
+- **Retry buttons** added throughout — `app/(tabs)/capture.tsx`'s failed-case
+  modal, and every case card in the Gallery (`components/CaseCard.tsx`, both
+  the grid and list variants) — re-run `startKycCheck` with the same stored
+  image URIs, no re-capture needed. Originally shown only for
+  `status === 'failed'`, now shown unconditionally so any past case (however
+  it resolved) can be re-checked against the current pipeline after a fix
+  lands, without losing case history (retrying creates a new case, doesn't
+  overwrite the old one).
+- **Identity MISMATCH silently downgraded to REVIEW instead of REJECT — real
+  bug, found live, fixed.** `judge.py`'s `_abstain()` helper (used by every
+  early-return gate: quality, too-few-usable-lanes, lane-disagreement,
+  uncertainty-band) hardcoded `decision="REVIEW"` regardless of identity, even
+  when Lane E had already confirmed a MISMATCH. The "MISMATCH -> REJECT" logic
+  further down `judge()` only ran if none of those earlier gates fired first —
+  so a wrong-person selfie whose PIXELS also happened to trigger any
+  authenticity-side abstention lost its REJECT and became a mere REVIEW.
+  Fixed at the one shared point (`_abstain()` now checks identity itself), so
+  it can't regress at any individual call site. Regression test:
+  `test_mismatch_rejects_even_when_authenticity_abstains` in
+  `service/test_service.py`.
+- **Lane G (screen/print replay) — full story, three real bugs found and
+  fixed via live testing, not assumed:**
+  1. *Scoring formula ignored severity entirely* (original version): scored
+     by how much AREA of the frame was flagged, the same approach as spatial
+     lanes B/C. But a moire peak is inherently narrow in frequency space and
+     can be extremely severe while covering very few blocks (z=25.4 observed
+     live on a confirmed real screen replay) — the area-based formula scored
+     that as ~0.01. Fixed to score by max z-score (severity) instead.
+  2. *Severity alone over-triggered on ordinary real photos.* A real photo
+     can have a handful of blocks with a moderately elevated z-score from
+     ordinary high-frequency detail, by chance — scoring by severity alone
+     let a tiny, incidental cluster score as high as a genuine widespread
+     pattern. Fixed by blending severity with coverage (`cluster /
+     MIN_CONFIDENT_CLUSTER_BLOCKS`), so a severe-but-tiny cluster now scores
+     moderately, not maximally.
+  3. *A single whole-image FFT can't tell "everywhere" from "one small
+     corner."* A genuine laminated/holographic Aadhar card produced a
+     false-positive moire-like signature from its own surface (a hologram or
+     foil strip is a small, localised feature, but a whole-image FFT reads
+     its severity as if it applied to the entire photo). This is why Lane G
+     was briefly selfie-only. **Properly fixed** by redesigning it patch-wise
+     (`PATCH_GRID = 4`, 16 patches): score is severity times *coverage across
+     spatially different patches* — a genuine screen replay lights up most
+     patches (the whole frame is a screen), a hologram sticker lights up only
+     the one or two it physically overlaps. This let Lane G be re-enabled on
+     the ID image too. Confirmed live across several real captures: correctly
+     flags genuine screen replays on both the ID and the selfie (z~10,
+     9-11/16 patches), correctly stays clean on the same laminated card that
+     used to false-positive, and correctly discounts small localised signals
+     (e.g. a striped shirt) instead of amplifying them. Test coverage in
+     `service/test_lane_screen.py`, including
+     `test_localised_pattern_scores_lower_than_widespread` for bug #3
+     specifically.
+  Known remaining false-positive risk (documented, not eliminated): fine
+  periodic texture spread across MOST of the frame (patterned wallpaper, a
+  striped shirt filling most of the photo) still reads as widespread, because
+  it genuinely is. Confidence stays capped at `CFG.screen_replay_confidence`
+  regardless.
+- **`service/lane_a_refine.py` — an optional secondary opinion on Lane A from
+  an external LLM (Groq, `qwen/qwen3.8-27b`), added by the user directly, not
+  by an earlier session pass.** Sends the ID/selfie image to Groq's API,
+  asks whether it looks synthetic, and folds a "real" or "fake" nudge into
+  Lane A's score/confidence when Groq is confident enough
+  (`_ASSIST_MIN_CONF`). No-op unless `GROQ_API_KEY` is set in `service/.env`
+  (gitignored). **Real tradeoffs found via live testing, not resolved, worth
+  knowing before relying on this:**
+  - *Privacy*: sends the actual ID document + selfie to a third-party API.
+    No disclosure or consent flow exists in the app for this — acceptable for
+    testing with the project owner's own knowing consent, NOT acceptable to
+    ship to real users without a proper disclosure/consent flow first.
+  - *Deliberately undisclosed by design*: the module's own docstring says it
+    "MUST NOT appear as its own lane, MUST NOT add reasons that name a vendor
+    or a second model" — it injects reasons worded to look native to Lane A.
+    This is a real tension with this whole project's "explainability IS the
+    product" ethos; flagged to the project owner directly, kept as-is at
+    their explicit direction.
+  - *The prompt initially inherited Lane A's own blind spot*: it originally
+    only asked about LOCAL synthesis (a pasted/inpainted region) — a
+    whole-image, from-scratch AI-generated photo has no local seam to spot,
+    so the secondary check missed it too. Fixed by broadening the prompt to
+    explicitly cover whole-image generation with concrete visual cues
+    (unnaturally perfect skin, missing catchlights, melted hair/background
+    transitions) — confirmed live: fixed the one specific miss found this
+    session (0.001 -> 0.820 on a real AI-generated photo) without breaking
+    the two known false-positive fixes it had already been helping with.
+  - *Non-deterministic and rate-limited on the free tier.* The exact same
+    photo can get a different secondary opinion on different retries — an
+    LLM call isn't guaranteed to answer identically twice, and Groq's free
+    tier 429s under rapid repeated calls, silently falling back to raw
+    Lane A when that happens. This is the most likely explanation for
+    "the same case sometimes lands on REVIEW, sometimes doesn't" observed in
+    live testing. Not fixed, and can't fully be with an external LLM in the
+    loop — the judge's lane-disagreement gate has so far caught every
+    observed case safely (REVIEW, never a false ACCEPT) even amid this
+    flakiness, which is the correct safety net for exactly this kind of
+    unreliable signal.
+  - *Deliberately not blended with raw Lane A, on purpose.* A real bug was
+    found where a strongly-confident raw Lane A catch (a genuine screen-
+    replayed selfie, scored 1.00) got hard-clamped down to 0.15 by a
+    disagreeing Groq read that was itself wrong. Considered switching to a
+    blended (weighted-average) override instead of a hard clamp, but there is
+    no reliable way to tell "the clamp is correct" from "the clamp is wrong"
+    using only Lane A's own score — the two already-validated false-positive
+    fixes (real photos wrongly scored 0.95-1.00 by raw Lane A) look
+    identical from inside this function to the one bad override just
+    described. Left as a hard clamp; the fix instead was making Lane G
+    genuinely reliable (see above), so it independently corroborates or
+    contradicts Lane A rather than needing Lane A/refine to self-referee.
+- **Lane B (noise residual) investigated for false-positives on genuine
+  selfies, no bug found.** Suspected modern phone camera processing
+  (beauty/denoise filters) might make real selfies read as "unnaturally
+  noise-free." Tested against three known-real, untouched photos: two scored
+  0.000, one scored a modest 0.134 but its own confidence (0.291) fell below
+  `CFG.min_lane_confidence` (0.35), so it self-excluded from the judge's
+  weighted average before ever influencing the verdict — the existing
+  confidence-gating already handles this correctly. The one case that DID
+  trigger Lane B strongly (841 blocks flagged) was later confirmed to be an
+  edited, background-removed image — very likely a correct catch, not a
+  false positive. No fix applied; nothing demonstrated to be broken.
 
 ## 9. If you only have 10 minutes before presenting
 

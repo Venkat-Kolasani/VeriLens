@@ -462,20 +462,22 @@ def main() -> None:
     tl = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, num_workers=2, drop_last=True)
     vl = DataLoader(val_ds, batch_size=args.batch_size, num_workers=2)
 
+    from tqdm.auto import tqdm
+
     SOURCES = ("exchanged", "inpainted", "original", "faces140k_real", "faces140k_fake")
     best = 0.0
     for ep in range(args.epochs):
         model.train()
         run = 0.0
-        for i, (x, y) in enumerate(tl):
+        pbar = tqdm(enumerate(tl), total=len(tl), desc=f"epoch {ep+1}/{args.epochs}")
+        for i, (x, y) in pbar:
             x, y = x.to(dev), y.to(dev)
             opt.zero_grad()
             loss = lossf(model(x), y)
             loss.backward()
             opt.step()
             run += loss.item()
-            if i % 100 == 0:
-                print(f"  epoch {ep+1} step {i}/{len(tl)} loss {run/(i+1):.4f}", flush=True)
+            pbar.set_postfix(loss=f"{run/(i+1):.4f}")
 
         # Score per source. The exchanged column is the honest headline for
         # INP-X: it is the setting where published detectors drop to
