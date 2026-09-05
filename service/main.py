@@ -99,8 +99,18 @@ async def _read_upload(f: UploadFile) -> bytes:
     return data
 
 
-def _analyze_one(data: bytes):
-    """Run the quality gate and every lane over one image."""
+def _analyze_one(data: bytes, *, check_screen_replay: bool = True):
+    """Run the quality gate and every lane over one image.
+
+    check_screen_replay=False for ID documents: confirmed via live testing
+    that a genuine laminated/holographic Aadhar card's own surface can
+    produce a periodic frequency-domain signature similar to screen moire,
+    a false positive unrelated to the actual threat Lane G defends against
+    (someone replaying a fake SELFIE via screen/print). ID documents don't
+    have that threat model the same way, and they do have a confirmed
+    confound Lane G can't yet tell apart from a real screen replay -- so
+    skip it there rather than ship a known false-positive source.
+    """
     import hashlib
 
     try:
@@ -113,8 +123,9 @@ def _analyze_one(data: bytes):
         lane_a_synthesis(bgr),
         lane_b_noise(bgr),
         lane_c_compression(pil, bgr),
-        lane_screen_replay(bgr),
     ]
+    if check_screen_replay:
+        results.append(lane_screen_replay(bgr))
     h, w = bgr.shape[:2]
 
     analysis = ImageAnalysis(
@@ -191,7 +202,9 @@ async def analyze(
     Attestation is always over the selfie — it's the image injection defence
     cares about (an ID document photo is not live-captured by the user).
     """
-    id_analysis, id_q, id_results, id_bgr, _ = _analyze_one(await _read_upload(id_image))
+    id_analysis, id_q, id_results, id_bgr, _ = _analyze_one(
+        await _read_upload(id_image), check_screen_replay=False
+    )
     selfie_analysis, s_q, s_results, s_bgr, _ = _analyze_one(await _read_upload(selfie))
     verified = _check_attestation(
         selfie_analysis.sha256, attestation_nonce, attestation_signature, attestation_public_key

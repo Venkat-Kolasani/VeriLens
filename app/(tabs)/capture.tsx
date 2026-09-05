@@ -400,6 +400,23 @@ export default function CaptureScreen() {
                   </View>
                 </View>
 
+                {failed && (
+                  <Pressable
+                    onPress={() => runCheck(result.idImageUri, result.selfieUri, result.idImageAttested)}
+                    style={({ pressed }) => [{ opacity: pressed ? 0.9 : 1, transform: [{ scale: pressed ? 0.97 : 1 }] }]}
+                  >
+                    <LinearGradient
+                      colors={['#F5C400', '#CCA200']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.viewDetailsButton}
+                    >
+                      <Ionicons name="refresh" size={18} color="#0A0A0A" />
+                      <Text style={[styles.viewDetailsText, { color: '#0A0A0A' }]}>Retry</Text>
+                    </LinearGradient>
+                  </Pressable>
+                )}
+
                 <Pressable
                   onPress={handleDismissCheck}
                   style={({ pressed }) => [{ opacity: pressed ? 0.9 : 1, transform: [{ scale: pressed ? 0.97 : 1 }] }]}
@@ -410,7 +427,7 @@ export default function CaptureScreen() {
                     end={{ x: 1, y: 0 }}
                     style={styles.viewDetailsButton}
                   >
-                    <Text style={styles.viewDetailsText}>View Full Case</Text>
+                    <Text style={styles.viewDetailsText}>{failed ? 'Dismiss' : 'View Full Case'}</Text>
                     <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
                   </LinearGradient>
                 </Pressable>

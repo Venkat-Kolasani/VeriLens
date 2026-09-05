@@ -1,12 +1,34 @@
-import React from 'react';
-import { View, Image, Text, Pressable, StyleSheet, Dimensions } from 'react-native';
+import React, { useState } from 'react';
+import { ActivityIndicator, View, Image, Text, Pressable, StyleSheet, Dimensions, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { VerdictPill, formatConfidence, verdictColor } from './Verdict';
 import { useThemeColors } from '@/hooks/useThemeColors';
+import { useAppStore } from '@/stores/media-store';
 import { Colors } from '@/constants/Colors';
 import type { KYCCase } from '@/lib/types';
+
+/** Re-runs a failed case's analysis (same pipeline capture.tsx's retry
+ *  button calls) without needing to re-capture photos. Shared by both card
+ *  variants below since a failed case can show up in either. */
+function useRetryFailedCase(kycCase: KYCCase) {
+  const startKycCheck = useAppStore((s) => s.startKycCheck);
+  const [retrying, setRetrying] = useState(false);
+
+  const retry = async () => {
+    setRetrying(true);
+    try {
+      await startKycCheck(kycCase.idImageUri, kycCase.selfieUri, kycCase.idImageAttested);
+    } catch (err: any) {
+      Alert.alert('Retry Failed', err?.message ?? 'Please try again.');
+    } finally {
+      setRetrying(false);
+    }
+  };
+
+  return { retrying, retry };
+}
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const CARD_PADDING = 20;
@@ -28,6 +50,7 @@ const statusColor = (status: KYCCase['status']) =>
 export function CaseCard({ kycCase }: CaseCardProps) {
   const router = useRouter();
   const { isDark, colors } = useThemeColors();
+  const { retrying, retry } = useRetryFailedCase(kycCase);
 
   return (
     <Pressable
@@ -64,6 +87,21 @@ export function CaseCard({ kycCase }: CaseCardProps) {
         )}
 
         <View style={[styles.statusDot, { backgroundColor: statusColor(kycCase.status) }]} />
+
+        {kycCase.status === 'failed' && (
+          <Pressable
+            onPress={retry}
+            disabled={retrying}
+            hitSlop={8}
+            style={[styles.retryButton, { backgroundColor: Colors.primary[500] }]}
+          >
+            {retrying ? (
+              <ActivityIndicator size="small" color="#0A0A0A" />
+            ) : (
+              <Ionicons name="refresh" size={16} color="#0A0A0A" />
+            )}
+          </Pressable>
+        )}
       </View>
 
       <View style={styles.info}>
@@ -85,6 +123,7 @@ export function CaseCard({ kycCase }: CaseCardProps) {
 export function CaseListCard({ kycCase }: CaseCardProps) {
   const router = useRouter();
   const { isDark, colors } = useThemeColors();
+  const { retrying, retry } = useRetryFailedCase(kycCase);
   const topReason = kycCase.reasons?.[0]?.text;
 
   return (
@@ -123,6 +162,21 @@ export function CaseListCard({ kycCase }: CaseCardProps) {
           {new Date(kycCase.createdAt).toLocaleString()}
         </Text>
       </View>
+
+      {kycCase.status === 'failed' && (
+        <Pressable
+          onPress={retry}
+          disabled={retrying}
+          hitSlop={8}
+          style={[styles.listRetryButton, { backgroundColor: Colors.primary[500] }]}
+        >
+          {retrying ? (
+            <ActivityIndicator size="small" color="#0A0A0A" />
+          ) : (
+            <Ionicons name="refresh" size={18} color="#0A0A0A" />
+          )}
+        </Pressable>
+      )}
     </Pressable>
   );
 }
@@ -175,6 +229,24 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     borderWidth: 1.5,
     borderColor: 'rgba(255,255,255,0.8)',
+  },
+  retryButton: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  listRetryButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
   },
   cardWatermark: {
     position: 'absolute',
