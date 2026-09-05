@@ -339,7 +339,6 @@ export default function CaptureScreen() {
                     {
                       backgroundColor: isDark ? Colors.dark.card : Colors.light.card,
                       borderColor: isDark ? Colors.dark.border : Colors.light.border,
-                      alignItems: 'flex-start',
                     },
                   ]}
                 >
@@ -382,7 +381,7 @@ export default function CaptureScreen() {
                         ID document (SHA-256)
                       </Text>
                       <Text style={[styles.resultDetailValue, { color: colors.text }]} numberOfLines={1}>
-                        {result.idImageSha256.substring(0, 24) || '—'}...
+                        {result.idImageSha256 ? `${result.idImageSha256.substring(0, 24)}...` : '—'}
                       </Text>
                     </View>
                   </View>
@@ -395,7 +394,7 @@ export default function CaptureScreen() {
                         Selfie (SHA-256)
                       </Text>
                       <Text style={[styles.resultDetailValue, { color: colors.text }]} numberOfLines={1}>
-                        {result.selfieSha256.substring(0, 24) || '—'}...
+                        {result.selfieSha256 ? `${result.selfieSha256.substring(0, 24)}...` : '—'}
                       </Text>
                     </View>
                   </View>

@@ -89,6 +89,18 @@ manager / earlier messages — not reproduced here):
   by direct API probes, not assumed.
 - Nothing is required for `service/.env` — SightEngine credentials there are
   optional and only feed the comparison baseline, never the verdict.
+- `EXPO_PUBLIC_WALLET_PRIVATE_KEY` — a funded Sepolia wallet is configured
+  (`0xb5F0Dac0fCf26E43D184f7BECE29EfF1F9585a85`, ~0.05 ETH, funded via the
+  Google Cloud Web3 faucet). `constants/config.ts` used to hardcode
+  `WALLET_PRIVATE_KEY = ''` as a literal in a committed file — right below a
+  comment saying never commit a private key there, which meant there was no
+  way to actually set a funded shared wallet without either committing a
+  secret or losing it on every reinstall. Now reads from `.env` (gitignored)
+  like every other secret. Without it, `getOrCreateWallet()` in
+  `lib/blockchain.ts` still falls back to a random per-device wallet needing
+  its own faucet visit — that path still works, just needs funding per
+  device. 0.05 ETH covers 150-500+ anchor transactions (a plain self-transfer
+  with calldata, ~25-30k gas each — no contract call, no deploy).
 
 ## 5. What's genuinely working vs. what's optional
 
@@ -182,6 +194,18 @@ retrain replaces. Drop the new `lane_a.pt` into `service/weights/`, run
 `service/test_service.py`, and re-test against real photos of real people —
 not just the training datasets' own held-out images.
 
+**Kaggle-specific bug fixed in the notebook:** cell 3 used to set
+`FACES140K_ROOT = DATA_ROOT` unconditionally whenever `ON_KAGGLE` was true,
+regardless of whether `xhlulu/140k-real-and-fake-faces` was actually added
+as an Input — so if you only attached INP-X, the script would search
+`/kaggle/input` for a real/fake folder pair, find none, and crash with
+`SystemExit`. Fixed: it now shallow-searches `/kaggle/input` first and only
+wires in `--faces140k-data` if the dataset is actually there, falling back
+to INP-X-only otherwise (matching what the docstring always said was
+optional). Also confirmed: Kaggle's newer `KGAT_...`-style single-token auth
+(`export KAGGLE_API_TOKEN=...`) works fine with `kaggle` CLI 2.2.4, both for
+the notebook's own download step and for local smoke-testing.
+
 ## 7. The pitch deck
 
 `pitch/VeriLens_Pitch.pptx` — 10 slides, structural + content QA passed,
@@ -213,6 +237,44 @@ app's root `package.json` and was reverted. If you regenerate the deck,
   never evidence of fakery, per Lane D's design. The nonce store is
   in-memory and single-process (fine for this demo; see the `# ponytail:`
   comment in `service/attestation.py` for the multi-instance upgrade path).
+  (Real bug fixed along the way: the attestation fields were plain params on
+  a route that also takes `File(...)`, so FastAPI silently read them as
+  query params, not form fields — attestation never worked over HTTP despite
+  passing unit tests that called the function directly. Fixed with
+  `Form(None)`; regression test added that goes through the actual FastAPI
+  route, not a bare function call.)
+- A face crop below the recognition model's native 112px input resolution
+  (`lane_face.LOW_QUALITY_FACE_PX`) — a low-res ID-document photo, commonly —
+  still gets an honest similarity score, but needs to clear `face_match_above`
+  by an extra `face_match_low_quality_margin` before counting as a confident
+  MATCH; otherwise it routes to INDETERMINATE. This is intentional, not a
+  bug: found via manual testing that a tiny Aadhar face crop (94px) produced
+  a meaningfully weaker embedding (0.573 similarity) than the same person's
+  full-res selfie (0.731) — same person, same match call either way in that
+  case, but the mechanism now exists to catch a genuinely marginal one.
+- Document-type verification (OCR-based Aadhar/PAN check) was built, tested,
+  then **deliberately removed**. In a real deployment, verifying the ID
+  document itself is genuine is DigiLocker's job (or a direct UIDAI/Income-
+  Tax API) — an authoritative government-backed check, not something an
+  OCR keyword match on a photo of a card can compete with. This project's
+  actual, non-substitutable contribution is verifying the *live selfie*
+  (Lanes A/D/E) — not re-solving a problem DigiLocker already solves. If
+  document-type verification is wanted back for a future demo, the code
+  existed in `service/lane_doc.py` (deleted) — reference git history if
+  reviving it, but frame it in the pitch as an approximation of a
+  DigiLocker-shaped gap, not the production design.
+- Two UI layout bugs fixed after live testing on a real device: (1)
+  `app/(tabs)/capture.tsx`'s post-capture "Why" card set `alignItems:
+  'flex-start'` on its container, which breaks React Native's default
+  cross-axis "stretch" behaviour for children — `VerdictReasons`'s text rows
+  (which rely on `flex: 1` to fill the row) collapsed to zero width, so
+  reason text rendered invisible while the severity dots (fixed size, so
+  unaffected) still showed. Fixed by removing the unneeded `alignItems`
+  override — nothing in that card actually needed it. (2) `app/verify/
+  [id].tsx`'s expandable section content mounted with no transition, causing
+  a blank-frame flash on Android while layout recalculated; wrapped it in
+  `Animated.View entering={FadeIn}` to match the screen's existing reanimated
+  patterns.
 
 ## 9. If you only have 10 minutes before presenting
 
@@ -220,6 +282,8 @@ app's root `package.json` and was reverted. If you regenerate the deck,
    `abhinavteja123`, no AI-authorship trailers.
 2. Open `pitch/VeriLens_Pitch.pptx` and `DEMO_SCRIPT.md` together.
 3. Run the service + app locally (§4) and do one real capture end-to-end —
-   don't present from a cold start you haven't verified today.
+   don't present from a cold start you haven't verified today. The
+   configured wallet is already funded (§4), so anchoring should just work —
+   no faucet detour needed live.
 4. If asked "is this novel research?" — no, and say so plainly (§2, and
    slide 9 of the deck). That's a strength, not an admission.

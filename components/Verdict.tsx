@@ -228,7 +228,7 @@ export function LaneScores({ lanes }: { lanes: LaneOut[] | null }) {
   }
 
   return (
-    <View>
+    <View style={{ width: '100%' }}>
       {lanes.map((lane, i) => (
         <View key={`${lane.lane}-${i}`} style={styles.laneRow}>
           <View style={styles.laneHeader}>
@@ -315,7 +315,15 @@ const styles = StyleSheet.create({
     opacity: 0.85,
   },
 
-  reasonList: { gap: 10 },
+  // width: '100%' makes this self-sufficient regardless of the parent's
+  // alignItems -- a parent using anything but the RN default 'stretch'
+  // (e.g. 'center') stops passing its width down to children, and the
+  // reason rows below rely on that width via flex: 1. Found live: the
+  // post-capture "Why" card reused a shared card style with
+  // alignItems: 'center', collapsing this view's width to its own content
+  // size and making every reason's text render at zero width (invisible)
+  // while the fixed-size severity dot next to it still showed.
+  reasonList: { width: '100%', gap: 10 },
   reasonRow: { flexDirection: 'row', gap: 9, alignItems: 'flex-start' },
   reasonDot: { width: 7, height: 7, borderRadius: 4, marginTop: 5 },
   reasonLane: {

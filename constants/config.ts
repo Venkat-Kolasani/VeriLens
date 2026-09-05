@@ -41,8 +41,11 @@ export const BLOCK_EXPLORER: string = CHAIN_EXPLORER;
 export const CONTRACT_ADDRESS: string = '0x0000000000000000000000000000000000000000';
 
 // ──── Wallet ────
-// Leave empty. getOrCreateWallet() in lib/blockchain.ts generates a
-// per-device wallet and stores it in expo-secure-store; the user funds
-// it from the in-app faucet button.
-// NEVER commit a private key here.
-export const WALLET_PRIVATE_KEY: string = '';
+// Read from .env (gitignored), not hardcoded here -- a literal in this file
+// would get committed the moment someone pastes in a funded key. Leave
+// EXPO_PUBLIC_WALLET_PRIVATE_KEY unset in .env and getOrCreateWallet() in
+// lib/blockchain.ts falls back to a per-device wallet stored in
+// expo-secure-store, which the user funds from the in-app faucet button.
+// Setting it gives every device the same pre-funded wallet instead --
+// ideal for a demo/hackathon build. NEVER commit a private key.
+export const WALLET_PRIVATE_KEY: string = process.env.EXPO_PUBLIC_WALLET_PRIVATE_KEY ?? '';

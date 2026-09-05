@@ -13,7 +13,7 @@ import {
   Modal,
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 
@@ -127,7 +127,11 @@ export default function CaseDetailScreen() {
             color={colors.textSecondary}
           />
         </Pressable>
-        {expandedSections[sectionId] && <View style={styles.sectionContent}>{children}</View>}
+        {expandedSections[sectionId] && (
+          <Animated.View entering={FadeIn.duration(180)} style={styles.sectionContent}>
+            {children}
+          </Animated.View>
+        )}
       </View>
     </Animated.View>
   );
