@@ -332,8 +332,11 @@ def model_card():
              "optional_deps": "requirements-ml.txt"},
             {"id": "G", "name": "Screen/print replay", "trained": False,
              "reads": "FFT moire-pattern signature of a photographed screen/print; "
-                      "new, unvalidated against any labelled dataset, confidence "
-                      "capped accordingly (CFG.screen_replay_confidence)"},
+                      "selfie only, not the ID image (a genuine laminated/holographic "
+                      "ID card produces a similar false-positive signature - confirmed "
+                      "via live testing); new, unvalidated against any labelled "
+                      "dataset, confidence capped accordingly "
+                      "(CFG.screen_replay_confidence)"},
         ],
         "thresholds": {k: v for k, v in vars(CFG).items()} or asdict(CFG),
         "confidence_is_calibrated": CFG.confidence_is_calibrated,
@@ -382,9 +385,13 @@ def model_card():
             "dataset.",
             "Lane G (screen/print replay) is new and unvalidated against any "
             "labelled dataset of real vs. replayed photos - reasoned about and "
-            "spot-checked manually only, not measured. Known false-positive risk: "
-            "fine periodic real-world texture (mesh fabric, patterned wallpaper). "
-            "Known false-negative risk: high-DPI/anti-moire screens and good print "
+            "spot-checked manually only, not measured. It runs on the selfie only, "
+            "not the ID image - confirmed via live testing that a genuine "
+            "laminated/holographic Aadhar card produces a false-positive moire-like "
+            "signature from its own surface, unrelated to screen/print replay. Known "
+            "false-positive risk remains even on the selfie: fine periodic "
+            "real-world texture (mesh fabric, patterned wallpaper). Known "
+            "false-negative risk: high-DPI/anti-moire screens and good print "
             "quality. Its confidence is capped low (CFG.screen_replay_confidence) "
             "so it contributes evidence without being trusted as a solved problem.",
         ],

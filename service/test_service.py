@@ -307,6 +307,34 @@ def test_attestation_rejects_wrong_signature():
     print("ok  wrong signature / wrong keypair rejected")
 
 
+def test_pair_endpoint_skips_screen_replay_for_id_image():
+    """Real bug found via live testing: a genuine laminated/holographic ID
+    card produces a false-positive moire-like signature from its own
+    surface, unrelated to actual screen/print replay -- so Lane G must run
+    on the selfie only, never the ID image, in the pair endpoint.
+    """
+    from fastapi.testclient import TestClient
+
+    import main
+
+    client = TestClient(main.app)
+    image_bytes = _jpeg_bytes(_textured(512, 512))
+
+    r = client.post(
+        "/v1/analyze",
+        files={
+            "id_image": ("id.jpg", image_bytes, "image/jpeg"),
+            "selfie": ("s.jpg", image_bytes, "image/jpeg"),
+        },
+    )
+    body = r.json()
+    id_lanes = {l["lane"] for l in body["id_image"]["lanes"]}
+    selfie_lanes = {l["lane"] for l in body["selfie"]["lanes"]}
+    assert "G" not in id_lanes, f"Lane G must not run on the ID image, got lanes {id_lanes}"
+    assert "G" in selfie_lanes, f"Lane G must run on the selfie, got lanes {selfie_lanes}"
+    print("ok  Lane G (screen/print replay) runs on the selfie only, not the ID image")
+
+
 def test_analyze_endpoint_honours_form_attestation():
     """Regression test for a real bug: attestation_nonce/signature/public_key
     were plain `str | None` params on a route that also takes `File(...)`.
@@ -382,6 +410,7 @@ if __name__ == "__main__":
         test_attestation_nonce_is_single_use,
         test_attestation_rejects_unknown_nonce,
         test_attestation_rejects_wrong_signature,
+        test_pair_endpoint_skips_screen_replay_for_id_image,
         test_analyze_endpoint_honours_form_attestation,
     ]:
         fn()
