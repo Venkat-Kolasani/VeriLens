@@ -226,8 +226,6 @@ uvicorn main:app --reload --port 8000
 
 Point the app at it with `EXPO_PUBLIC_API_BASE_URL` (defaults to `http://localhost:8000`).
 
-> The old Node backend in `server/` is deprecated and being removed — see [server/README.md](server/README.md).
-
 > See the [Full Setup Guide](SETUP.md) for detailed instructions on configuring Sepolia, Supabase, and the forensics service.
 
 ---
@@ -245,7 +243,7 @@ VeriLens/
 │   │   ├── index.tsx           # Home dashboard (stats + recent activity)
 │   │   ├── capture.tsx         # Camera capture + live verification modal
 │   │   ├── gallery.tsx         # Media gallery grid with filters
-│   │   ├── scanner.tsx         # Gallery integrity scanner
+│   │   ├── review.tsx          # Manual-review queue for REVIEW-routed cases
 │   │   └── profile.tsx         # Profile, wallet, device key, settings
 │   └── verify/
 │       └── [id].tsx            # Verification detail view
@@ -254,7 +252,7 @@ VeriLens/
 │   ├── pipeline.ts             # Verification orchestrator
 │   ├── crypto.ts               # Ed25519 key management + SHA-256 hashing
 │   ├── blockchain.ts           # Sepolia integration (ethers.js + Blockscout v2)
-│   ├── ai-detection.ts         # Forensics service client
+│   ├── forensics.ts            # Forensics service client
 │   ├── supabase.ts             # Supabase cloud integration
 │   ├── db.ts                   # Local SQLite database layer
 │   └── types.ts                # TypeScript interfaces
@@ -266,7 +264,7 @@ VeriLens/
 │
 ├── components/                 # Reusable UI components
 │   ├── VerificationSteps.tsx   # Pipeline step timeline
-│   └── MediaCard.tsx           # Result grid/list card
+│   └── CaseCard.tsx            # Result grid/list card
 │
 ├── stores/
 │   └── media-store.ts          # Zustand global state
@@ -279,8 +277,6 @@ VeriLens/
 │
 ├── contracts/
 │   └── MediaProof.sol          # Optional Solidity contract (0.8.20)
-│
-├── server/                     # DEPRECATED Express.js backend (being removed)
 │
 ├── hooks/                      # Custom React hooks
 │   └── useThemeColors.ts       # Dark/light theme hook
@@ -296,19 +292,17 @@ VeriLens/
 
 ## 🔄 Verification Pipeline
 
-When you capture or import a photo, VeriLens runs a **7-step verification pipeline** (orchestrated by `lib/pipeline.ts`):
+When you capture a KYC pair, VeriLens runs a **5-step pipeline** (orchestrated by `lib/pipeline.ts`):
 
 ```
-Step 1: Hash       → SHA-256 digest of raw file bytes
-Step 2: Sign       → Ed25519 signature using device private key
-Step 3: Blockchain → Anchor proof on Sepolia (smart contract or data tx)
-Step 4: AI Detect  → Deepfake + AI-generation analysis via SightEngine
-Step 5: Trust      → Compute weighted 0–100 trust score
-Step 6: Watermark  → Apply visible overlay + generate invisible ID
-Step 7: Cloud Sync → Upload proof record + thumbnail to Supabase
+Step 1: Hash       → SHA-256 digest of the ID document and selfie
+Step 2: Sign       → Ed25519 signature over the pair, using the device key
+Step 3: Forensics  → Local FastAPI service returns the three-axis verdict
+Step 4: Anchor     → Verdict digest anchored on Sepolia (non-fatal if it fails)
+Step 5: Cloud Sync → Case record synced to Supabase (non-fatal if it fails)
 ```
 
-Each step reports its status in real-time to the UI via progress callbacks. Steps are fault-tolerant — blockchain or cloud failures are recorded as errors but don't block the rest of the pipeline.
+Each step reports its status in real-time to the UI via progress callbacks. A forensics failure is fatal — there is no verdict to anchor or sync, so those two steps are marked skipped rather than guessed. Anchoring and cloud sync failures are recorded as errors but don't block the rest of the pipeline; the verdict is kept locally either way.
 
 ---
 
@@ -469,12 +463,11 @@ Any modification to a file changes its SHA-256 hash → **broken chain of trust*
 
 ## 🌍 Real-World Use Cases
 
-- **Journalists** in conflict zones — proving a photo is real, not staged
-- **Legal professionals** — submitting digital evidence that courts can trust
-- **Insurance companies** — verifying damage photos weren't sourced from the internet
-- **Social media platforms** — providing a verified "proof of capture" badge
-- **Whistleblowers** — creating an immutable record that can't be denied or erased
-- **Content creators** — proving ownership and originality of their work
+- **Banks & fintechs** — remote account opening that catches an AI-generated face or a spliced ID photo before it reaches a human reviewer
+- **Crypto exchanges** — KYC/AML onboarding with an auditable reason for every accept/reject, not just a score
+- **Rental & gig platforms** — landlord- or platform-side identity checks before handing over keys or a delivery route
+- **Age-restricted services** — confirming the live selfie actually matches the submitted ID, not an imported photo
+- **Compliance teams** — an immutable, timestamped record of what was decided and why, for later audit
 
 ---
 
@@ -487,8 +480,8 @@ Any modification to a file changes its SHA-256 hash → **broken chain of trust*
 | Expo | Free | Unlimited |
 | Sepolia Testnet | Free | SepoliaETH from faucet |
 | Supabase | Free | 500 MB database, 1 GB storage |
-| SightEngine | Free | 500 operations/month |
-| Vercel / Render | Free | Serverless hosting |
+| SightEngine (optional baseline) | Free | 500 operations/month |
+| HuggingFace Spaces (optional hosting) | Free | CPU tier |
 
 ---
 

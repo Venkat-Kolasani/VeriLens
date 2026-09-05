@@ -280,8 +280,8 @@ KYC image changes nothing in the returned verdict.
 | Blockchain | Sepolia Testnet (EVM, Chain ID 11155111) via ethers v6 |
 | Cloud Storage | Supabase (PostgreSQL + Object Storage) |
 | Local Database | expo-sqlite v16 |
-| AI Detection | SightEngine API (deepfake + AI-generated) |
-| Backend | Express.js + multer + node-fetch |
+| Forensics Service | Python + FastAPI (`service/`) — training-free noise/compression lanes, optional trained detector + face match |
+| AI Detection (optional baseline) | SightEngine API — comparison only, not the detector |
 | State Management | Zustand v5 |
 | UI | React Native + Reanimated 4 + Expo LinearGradient |
 | Styling | NativeWind / Tailwind CSS |

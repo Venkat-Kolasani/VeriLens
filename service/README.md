@@ -324,7 +324,7 @@ the service runs fine with none of them set.
 
 | File | What it holds |
 |---|---|
-| `main.py` | FastAPI app, request/response models, the four endpoints |
+| `main.py` | FastAPI app, request/response models, the five endpoints |
 | `lanes.py` | Quality gate, Lane B, Lane C, shared block/z-score/cluster helpers |
 | `judge.py` | Rule-based judge: three axes, four abstention gates |
 | `config.py` | Every threshold that drives a verdict, in one place |

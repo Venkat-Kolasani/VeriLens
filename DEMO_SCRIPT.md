@@ -21,20 +21,19 @@
 
 ## PART 2 — What Is VeriLens? (0:25 – 0:55)
 
-**[SCREEN: Show the app home screen with the "Proof of Capture" tagline]**
+**[SCREEN: Show the app home screen]**
 
-> *"VeriLens is a mobile app that creates an **unforgeable proof of capture** for every photo you take. The moment you snap a picture, VeriLens does four things in under 10 seconds:"*
+> *"VeriLens is a mobile KYC check. It takes the two images every remote onboarding flow already collects — an **ID document photo** and a **live selfie** — and answers three separate questions in one pass:"*
 
-**[SCREEN: Open the Capture screen, take a photo, show the verification modal animating through steps]**
+**[SCREEN: Open the Capture screen, take the ID photo then the selfie, show the verification modal animating through steps]**
 
-> 1. *"**Generates a SHA-256 cryptographic hash** — a unique digital fingerprint of every pixel."*
-> 2. *"**Signs it with your device's Ed25519 key** — proving it came from YOUR phone."*
-> 3. *"**Anchors that proof on a real blockchain** — the Sepolia Testnet — making it permanent and tamper-proof."*
-> 4. *"**Runs AI deepfake analysis** — using SightEngine to detect manipulation, face-swaps, and AI generation."*
+> 1. *"**Is either image AI-generated or manipulated?** Independent forensic lanes look for synthetic noise patterns and inconsistent recompression."*
+> 2. *"**Is the person in the selfie the person on the ID?** Face embeddings from both images are compared."*
+> 3. *"**What should a human do about it?** Accept, reject, or send it to manual review."*
 
-> *"At the end, you get a **Trust Score out of 100** — a single number that tells you: is this media authentic?"*
+> *"There's no single score. VeriLens reports three axes — **authenticity**, **identity**, **decision** — with the evidence behind each, and it **abstains** instead of guessing when an image is too degraded to read honestly. Every verdict is hashed, signed with the device's key, and anchored on Sepolia so it's an auditable record of what was decided and when."*
 
-**[SCREEN: Show the Trust Score circle animating to a high score like 95/A+]**
+**[SCREEN: Show the verdict card — authenticity / identity / decision pills, with the reasons underneath]**
 
 ---
 
@@ -42,37 +41,37 @@
 
 ### Demo 1: Capture & Verify (0:55 – 1:20)
 
-**[SCREEN: Open camera → tap the capture button]**
+**[SCREEN: Open camera → capture the ID document → capture the live selfie]**
 
-> *"Let me show you. I'll take a photo right now..."*
+> *"Let me show you. First the ID document — I can import this one from the gallery, since people usually photograph their passport once. Then the selfie — camera only, no gallery import, because an importable selfie is exactly the injection attack this app exists to catch."*
 
-**[SCREEN: Verification modal appears — steps animate one by one: Hash → Sign → Blockchain → AI → Trust Score → Watermark → Cloud Sync]**
+**[SCREEN: Verification modal appears — steps animate one by one: Hash → Sign → Forensics → Anchor → Cloud Sync]**
 
-> *"Watch — VeriLens is hashing the file... signing it with my device key... and right now it's writing a transaction to the Sepolia. That transaction is permanent — no one can delete it, not even me."*
+> *"Watch — VeriLens hashes and signs the pair, runs it through the local forensics service, and anchors the verdict on Sepolia. That transaction is permanent — no one can delete it, not even me."*
 
-**[SCREEN: Verification complete, trust score shows]**
+**[SCREEN: Verification complete, three-axis result shows]**
 
-> *"Trust Score: 97, Grade A+. This photo is provably real, captured on this device, at this exact moment."*
+> *"Authenticity: REAL. Identity: MATCH. Decision: ACCEPT — with the specific lane evidence that produced each call, not just a number."*
 
 ### Demo 2: Verify Someone Else's Proof (1:20 – 1:40)
 
 **[SCREEN: Tap "Verify a Proof" from home screen → show the 3 verification modes]**
 
-> *"But here's where it gets powerful. Say someone sends you a photo and claims it's real. You can verify it three ways:"*
+> *"But here's where it gets powerful. Say someone sends you a case and claims it's real. You can verify it three ways:"*
 >
 > - *"**Paste the blockchain transaction hash** — and VeriLens pulls the on-chain proof directly."*
 > - *"**Enter the file hash** — and it cross-checks against our Supabase database."*
-> - *"**Or just drop the image itself** — VeriLens re-hashes it and tells you if it matches any recorded proof."*
+> - *"**Or just drop the image itself** — VeriLens re-hashes it and tells you if it matches any recorded case."*
 
 **[SCREEN: Show a verification result — green checkmark, hash match confirmed, on-chain proof found]**
 
 > *"If even a single pixel was changed — a screenshot, a crop, a filter — the hash won't match. Tampering is mathematically impossible to hide."*
 
-### Demo 3: Gallery Integrity Scanner (1:40 – 1:50)
+### Demo 3: Manual Review Queue (1:40 – 1:50)
 
-**[SCREEN: Open the Scanner tab → tap "Scan Gallery"]**
+**[SCREEN: Open the Review tab]**
 
-> *"VeriLens also has a gallery scanner. It scans every image on your phone — WhatsApp, Snapchat, Camera, Downloads — hashes them all, and detects if any files have been tampered with since they were first seen."*
+> *"Not every case is a clean accept or reject. When the forensics service can't reach a confident verdict — lanes disagree, the identity can't be verified, the image quality is too low — VeriLens routes it here instead of guessing, and a human makes the final call."*
 
 ---
 
@@ -80,18 +79,17 @@
 
 **[SCREEN: Show a simple architecture diagram or bullet list on screen]**
 
-> *"Under the hood, this is a full-stack, production-grade system:"*
+> *"Under the hood:"*
 >
 > - *"**React Native + Expo** — cross-platform mobile app"*
 > - *"**SHA-256 hashing** with `expo-crypto` — the same algorithm Bitcoin uses"*
-> - *"**Ed25519 digital signatures** from `@noble/ed25519` — military-grade elliptic curve cryptography"*
-> - *"**Sepolia Testnet** — a real EVM-compatible blockchain where we deploy a custom Solidity smart contract called `MediaProof.sol`"*
-> - *"**SightEngine API** — AI deepfake and AI-generated content detection"*
-> - *"**Supabase** — PostgreSQL database + cloud storage for proof records"*
+> - *"**Ed25519 digital signatures** from `@noble/ed25519` — elliptic curve cryptography"*
+> - *"**Sepolia Testnet** — a real EVM-compatible blockchain, with an optional custom Solidity contract, `MediaProof.sol`"*
+> - *"**A Python FastAPI forensics service** — the actual detector: training-free noise-residual and compression/ELA lanes, plus an optional trained detector and face-match lane, all running locally with no third-party call"*
+> - *"**Supabase** — PostgreSQL database + cloud storage for case records"*
 > - *"**SQLite** — offline-first local cache so the app works without internet"*
-> - *"And an **Express.js backend** deployed on Vercel for the AI analysis endpoints"*
 
-> *"Every layer is designed so that no single point of failure can compromise the proof."*
+> *"Every layer is designed so that no single point of failure can compromise the verdict."*
 
 ---
 
@@ -101,13 +99,12 @@
 
 > *"Think about who needs this:"*
 >
-> - *"**Journalists** in conflict zones — proving a photo is real, not staged"*
-> - *"**Legal professionals** — submitting digital evidence that courts can trust"*
-> - *"**Insurance companies** — verifying damage photos weren't taken from Google"*
-> - *"**Social media platforms** — giving users a verified 'proof of capture' badge"*
-> - *"**Whistleblowers** — creating an immutable record that can't be denied or erased"*
+> - *"**Banks & fintechs** — remote account opening that catches an AI-generated face or a spliced ID photo before a human reviewer sees it"*
+> - *"**Crypto exchanges** — KYC/AML onboarding with an auditable reason for every accept or reject"*
+> - *"**Rental & gig platforms** — identity checks before handing over keys or a delivery route"*
+> - *"**Compliance teams** — an immutable, timestamped record of what was decided and why"*
 
-> *"In a world drowning in deepfakes, VeriLens doesn't just detect fakes — it **proves originals**."*
+> *"In a world drowning in deepfakes, VeriLens doesn't just flag fakes — it gives KYC a reason it can act on."*
 
 ---
 
