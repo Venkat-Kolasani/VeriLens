@@ -162,6 +162,32 @@ def test_identity_axis_independent():
     print("ok  identity axis is independent of authenticity")
 
 
+def test_mismatch_rejects_even_when_authenticity_abstains():
+    """Real bug found live: lanes disagreeing on authenticity (Gate 3) used
+    to abstain to REVIEW unconditionally, discarding an already-confirmed
+    identity MISMATCH from Lane E along the way. A wrong-person selfie must
+    REJECT regardless of whether the pixel-forensic lanes could agree on
+    real-vs-fake -- those are independent axes, and identity is the more
+    settled one here.
+    """
+    from lanes import LaneResult
+
+    pil, bgr = load_image(_jpeg_bytes(_textured(512, 512)))
+    q = quality_gate(pil, bgr)
+    # Deliberately disagreeing lanes -> Gate 3 (lane disagreement) fires
+    lanes = [
+        LaneResult("B", "Noise residual", 0.05, 0.9),
+        LaneResult("C", "Compression / ELA", 0.95, 0.9),
+    ]
+    v = judge(q, lanes, face_similarity=0.05)  # below face_mismatch_below -> MISMATCH
+    assert v.authenticity == "INSUFFICIENT_EVIDENCE", v.authenticity
+    assert v.identity == "MISMATCH", v.identity
+    assert v.decision == "REJECT", (
+        "identity MISMATCH must reject even when authenticity abstains, got " + v.decision
+    )
+    print("ok  identity MISMATCH rejects even when authenticity gates abstain")
+
+
 def test_low_quality_face_needs_wider_match_margin():
     """A similarity that clears face_match_above off a low-res crop (e.g. a
     small ID-document photo) must NOT be treated as confidently as the same
@@ -349,6 +375,7 @@ if __name__ == "__main__":
         test_lane_disagreement_abstains,
         test_attestation_never_lowers,
         test_identity_axis_independent,
+        test_mismatch_rejects_even_when_authenticity_abstains,
         test_low_quality_face_needs_wider_match_margin,
         test_pair_without_face_match_never_accepts,
         test_attestation_verifies_valid_signature,

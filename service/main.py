@@ -24,6 +24,7 @@ from baseline import run_all as run_baselines
 from config import CFG
 from judge import Verdict, judge
 from lane_a import lane_a_synthesis
+from lane_screen import lane_screen_replay
 from lane_face import face_similarity
 from lanes import lane_b_noise, lane_c_compression, load_image, quality_gate
 
@@ -108,7 +109,12 @@ def _analyze_one(data: bytes):
         raise HTTPException(400, f"Could not decode image: {e}") from e
 
     q = quality_gate(pil, bgr)
-    results = [lane_a_synthesis(bgr), lane_b_noise(bgr), lane_c_compression(pil, bgr)]
+    results = [
+        lane_a_synthesis(bgr),
+        lane_b_noise(bgr),
+        lane_c_compression(pil, bgr),
+        lane_screen_replay(bgr),
+    ]
     h, w = bgr.shape[:2]
 
     analysis = ImageAnalysis(
@@ -310,6 +316,10 @@ def model_card():
             {"id": "E", "name": "Face match", "trained": True,
              "reads": "cosine similarity between ID and selfie face embeddings",
              "optional_deps": "requirements-ml.txt"},
+            {"id": "G", "name": "Screen/print replay", "trained": False,
+             "reads": "FFT moire-pattern signature of a photographed screen/print; "
+                      "new, unvalidated against any labelled dataset, confidence "
+                      "capped accordingly (CFG.screen_replay_confidence)"},
         ],
         "thresholds": {k: v for k, v in vars(CFG).items()} or asdict(CFG),
         "confidence_is_calibrated": CFG.confidence_is_calibrated,
@@ -356,6 +366,13 @@ def model_card():
             "every affected case to REVIEW instead - but it does mean higher "
             "REVIEW rates on real users until Lane A is retrained on a broader "
             "dataset.",
+            "Lane G (screen/print replay) is new and unvalidated against any "
+            "labelled dataset of real vs. replayed photos - reasoned about and "
+            "spot-checked manually only, not measured. Known false-positive risk: "
+            "fine periodic real-world texture (mesh fabric, patterned wallpaper). "
+            "Known false-negative risk: high-DPI/anti-moire screens and good print "
+            "quality. Its confidence is capped low (CFG.screen_replay_confidence) "
+            "so it contributes evidence without being trusted as a solved problem.",
         ],
         "does_not_claim": [
             "Novel research. The techniques (ELA, noise residuals, robust "

@@ -39,6 +39,12 @@ class Config:
     # exists, not by trusting a bigger same-distribution val_acc_exchanged.
     lane_a_confidence_cap: float = 0.5
 
+    # Lane G (screen/print replay, moire detection) is new and unvalidated
+    # against any labelled real-vs-replay dataset -- reasoned about and
+    # spot-checked manually only. Capped low so it can contribute evidence
+    # without dominating the judge until real calibration data exists.
+    screen_replay_confidence: float = 0.4
+
     # ---- judge ----
     # Gap between these two is the abstention band. Deliberately wide: in KYC
     # a confidently wrong reject locks a real user out of their bank.

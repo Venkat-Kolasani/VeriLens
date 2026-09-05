@@ -51,6 +51,7 @@ service/main.py             FastAPI app — /v1/analyze, /v1/analyze/single, /v1
 service/lanes.py            Quality gate, Lane B (noise residual), Lane C (compression/ELA)
 service/lane_a.py           Lane A — trained patch-level local-synthesis detector (optional)
 service/lane_face.py        Lane E — ArcFace face match (optional)
+service/lane_screen.py      Lane G — screen/print replay via FFT moire detection (new, unvalidated)
 service/judge.py            Rule-based judge: combines lanes into the three-axis verdict
 service/config.py           Every threshold in one place — nothing hardcoded inline
 service/train_lane_a.py     Lane A trainer (INP-X, Kaggle or Colab or local)

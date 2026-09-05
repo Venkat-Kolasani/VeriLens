@@ -43,10 +43,18 @@ class Verdict:
 
 
 def _abstain(reasons: list[Reason], identity: Identity | None) -> Verdict:
+    """Authenticity couldn't be determined (bad quality, too few usable
+    lanes, lane disagreement, or an uncertain aggregate score) -- but a
+    confirmed identity MISMATCH is an independent, already-settled fact from
+    Lane E, not entangled with any of those pixel-forensic uncertainties. A
+    real photo of the wrong person must still REJECT even when the pixels'
+    authenticity is unknown -- abstaining to REVIEW here would silently
+    drop a confident MISMATCH the same way every early-return path used to.
+    """
     return Verdict(
         authenticity="INSUFFICIENT_EVIDENCE",
         identity=identity,
-        decision="REVIEW",
+        decision="REJECT" if identity == "MISMATCH" else "REVIEW",
         confidence=0.0,
         confidence_is_calibrated=CFG.confidence_is_calibrated,
         score=None,
